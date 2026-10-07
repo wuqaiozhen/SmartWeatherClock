@@ -21,7 +21,13 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "Led.hpp"   /* LED �? + C 接口（extern "C"），C 编译器只会看到函数原�? */
+#include "Led.hpp"   /* LED �????? + C 接口（extern "C"），C 编译器只会看到函数原�????? */
+#include "stm32f407xx.h"
+#include "stm32f4xx_hal.h"
+#include "stm32f4xx_hal_gpio.h"
+#include "stm32f4xx_hal_uart.h"
+#include <string.h>
+//#include <cstdint>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -40,21 +46,44 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
+static uint32_t blinkInterval = 1000;
+static uint8_t dataRcvd;
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if (huart == &huart1 )
+  {
+    HAL_UART_Transmit(&huart1, &dataRcvd, 1, 100);
+    if (dataRcvd == '1')
+    {
+      blinkInterval = 1000;
+    }
+    else if (dataRcvd == '2') 
+    {
+    blinkInterval = 300;
+    }
+    else if (dataRcvd == '3') 
+    {
+    blinkInterval = 50;
+    }
+    HAL_UART_Receive_IT(&huart1, &dataRcvd, 1);
+  }
+}
 /* USER CODE END 0 */
 
 /**
@@ -86,21 +115,27 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  char *msg = "Hello\r\n";
+  HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+   HAL_UART_Receive_IT(&huart1, &dataRcvd, 1);
+  /* USER CODE END 2 */
   while (1)
   {
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
-    LED_Toggle();        /* 翻转 PA1 上的 LED（低电平点亮，此处仅翻转电平�? */
-    HAL_Delay(500);      /* 延时 500ms，形�? 1Hz 闪烁 */
-  }
+  LED_On();
+  HAL_Delay(blinkInterval);
+  LED_Off();
+  HAL_Delay(blinkInterval);
+ 
   /* USER CODE END 3 */
+}
 }
 
 /**
@@ -145,6 +180,39 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 115200;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -160,6 +228,12 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET);
+
+  /*Configure GPIO pin : PA0 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PA1 */
   GPIO_InitStruct.Pin = GPIO_PIN_1;
