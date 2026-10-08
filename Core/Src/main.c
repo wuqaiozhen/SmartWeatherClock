@@ -21,11 +21,13 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "Led.hpp"   /* LED �????? + C 接口（extern "C"），C 编译器只会看到函数原�????? */
+#include "Led.hpp"   /* LED 类 + C 接口（extern "C"），C 编译器只会看到函数原型 */
+#include "Key.hpp"   /* 按键类 + C 接口 */
 #include "stm32f407xx.h"
 #include "stm32f4xx_hal.h"
 #include "stm32f4xx_hal_gpio.h"
 #include "stm32f4xx_hal_uart.h"
+//#include <cstdint>
 #include <string.h>
 //#include <cstdint>
 /* USER CODE END Includes */
@@ -49,8 +51,6 @@
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-static uint32_t blinkInterval = 1000;
-static uint8_t dataRcvd;
 
 /* USER CODE END PV */
 
@@ -64,26 +64,6 @@ static void MX_USART1_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-  if (huart == &huart1 )
-  {
-    HAL_UART_Transmit(&huart1, &dataRcvd, 1, 100);
-    if (dataRcvd == '1')
-    {
-      blinkInterval = 1000;
-    }
-    else if (dataRcvd == '2') 
-    {
-    blinkInterval = 300;
-    }
-    else if (dataRcvd == '3') 
-    {
-    blinkInterval = 50;
-    }
-    HAL_UART_Receive_IT(&huart1, &dataRcvd, 1);
-  }
-}
 /* USER CODE END 0 */
 
 /**
@@ -100,7 +80,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+   HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -117,25 +97,58 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  char *msg = "Hello\r\n";
-  HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-   HAL_UART_Receive_IT(&huart1, &dataRcvd, 1);
   /* USER CODE END 2 */
   while (1)
   {
     /* USER CODE END WHILE */
+
     /* USER CODE BEGIN 3 */
-  LED_On();
-  HAL_Delay(blinkInterval);
-  LED_Off();
-  HAL_Delay(blinkInterval);
- 
+    /* 短按 / 长按 二选一：
+     *  - 按住期间只可能触发【长按】；
+     *  - 松手时若从未触发过长按，才结算为【短按】。
+     *  这样长按就不会再多发一次 hello。 */
+    {
+      static uint32_t pressStart = 0;   /* 本次按下的起始时刻 */
+      static uint8_t  holding    = 0;   /* 是否正在统计一次按住 */
+      static uint8_t  longFired  = 0;   /* 本次按住是否已触发过长按 */
+
+      if (KEY_Pressed())                /* 检测到一次“按下”边沿 */
+      {
+        pressStart = HAL_GetTick();
+        holding    = 1;
+        longFired  = 0;
+      }
+
+      if (holding)
+      {
+        if (KEY_NowPressed())           /* 仍在按住 */
+        {
+          uint32_t now = HAL_GetTick();
+          if (!longFired && (now - pressStart) >= 1000)
+          {
+            longFired = 1;
+            char *msg = "long\r\n";
+            HAL_UART_Transmit(&huart1, (uint8_t *)msg, strlen(msg), 100);
+          }
+        }
+        else                            /* 松手，结算这次按下 */
+        {
+          holding = 0;
+          if (!longFired)               /* 没到长按阈值 -> 算短按 */
+          {
+            char *msg = "hello\r\n";
+            HAL_UART_Transmit(&huart1, (uint8_t *)msg, strlen(msg), 100);
+            LED_Toggle();
+          }
+        }
+      }
+    }
+  }
   /* USER CODE END 3 */
-}
 }
 
 /**
@@ -231,7 +244,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : PA0 */
   GPIO_InitStruct.Pin = GPIO_PIN_0;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
@@ -242,12 +255,26 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
-
+/**
+  * @brief  GPIO 外部中断回调（由 HAL_GPIO_EXTI_IRQHandler 调用�?
+  * @param  GPIO_Pin 触发中断的引�?
+  * @note   本函数在中断上下文中执行，应尽量短小、不要用 HAL_Delay�?
+  */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  /* 中断里只做分发：消抖与“按下事件”的记录都在 Key 类内部完成，
+     真正的业务处理放到主循环（见下面的 KEY_Pressed() 轮询）。 */
+  KEY_EXTI_Handler(GPIO_Pin);
+}
 /* USER CODE END 4 */
 
 /**

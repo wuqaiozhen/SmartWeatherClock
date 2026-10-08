@@ -150,9 +150,7 @@
     (+) PWM_PulseFinishedCallback         : TIM PWM Pulse Finished Callback.
     (+) PWM_PulseFinishedHalfCpltCallback : TIM PWM Pulse Finished half complete Callback.
     (+) ErrorCallback                     : TIM Error Callback.
-    (+) CommutationCallback               : TIM Commutation Callback.
-    (+) CommutationHalfCpltCallback       : TIM Commutation half complete Callback.
-    (+) BreakCallback                     : TIM Break Callback.
+    (+) CommutationCallb  : TIM Break Callback.
 
   [..]
 By default, after the Init and when the state is HAL_TIM_STATE_RESET
