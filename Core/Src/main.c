@@ -21,15 +21,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "Led.hpp"   /* LED 类 + C 接口（extern "C"），C 编译器只会看到函数原型 */
-#include "Key.hpp"   /* 按键类 + C 接口 */
-#include "stm32f407xx.h"
-#include "stm32f4xx_hal.h"
-#include "stm32f4xx_hal_gpio.h"
-#include "stm32f4xx_hal_uart.h"
-//#include <cstdint>
-#include <string.h>
-//#include <cstdint>
+#include <stdint.h>
+#include <stdio.h>
+#include <uart.h>
+#include "aht20.h"
+#include "bmp280.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -48,6 +44,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c1;
+
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
@@ -58,6 +56,7 @@ UART_HandleTypeDef huart1;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -80,7 +79,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-   HAL_Init();
+  HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -96,8 +95,22 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART1_UART_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  /* USER CODE END 2 */
+   float t, h;
+   if(AHT20_Read(&t, &h) == 0)
+    printf("AHT20: temp=%.2f C, humi=%.2f %%\r\n",t,h);
+  else
+   printf("AHT20 read failed\r\n");
+  
+uint32_t adc_P,adc_T;
+  BMP280_ReadCalib();
+  BMP280_WriteReg(0xf4, 0x27);
+  BMP280_ReadData(&adc_P,&adc_T);
+ int32_t temp = BMP280_CompensateTemp((int32_t)adc_T);
+ uint32_t press = BMP280_CompensatePress((int32_t)adc_P);
+ printf("BMP280 temp=%d.%02d C press=%u.%02u hPa\r\n" ,temp/100,temp % 100,press/100,press%100);
+     /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -107,46 +120,6 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    /* 短按 / 长按 二选一：
-     *  - 按住期间只可能触发【长按】；
-     *  - 松手时若从未触发过长按，才结算为【短按】。
-     *  这样长按就不会再多发一次 hello。 */
-    {
-      static uint32_t pressStart = 0;   /* 本次按下的起始时刻 */
-      static uint8_t  holding    = 0;   /* 是否正在统计一次按住 */
-      static uint8_t  longFired  = 0;   /* 本次按住是否已触发过长按 */
-
-      if (KEY_Pressed())                /* 检测到一次“按下”边沿 */
-      {
-        pressStart = HAL_GetTick();
-        holding    = 1;
-        longFired  = 0;
-      }
-
-      if (holding)
-      {
-        if (KEY_NowPressed())           /* 仍在按住 */
-        {
-          uint32_t now = HAL_GetTick();
-          if (!longFired && (now - pressStart) >= 1000)
-          {
-            longFired = 1;
-            char *msg = "long\r\n";
-            HAL_UART_Transmit(&huart1, (uint8_t *)msg, strlen(msg), 100);
-          }
-        }
-        else                            /* 松手，结算这次按下 */
-        {
-          holding = 0;
-          if (!longFired)               /* 没到长按阈值 -> 算短按 */
-          {
-            char *msg = "hello\r\n";
-            HAL_UART_Transmit(&huart1, (uint8_t *)msg, strlen(msg), 100);
-            LED_Toggle();
-          }
-        }
-      }
-    }
   }
   /* USER CODE END 3 */
 }
@@ -190,6 +163,40 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
 }
 
 /**
@@ -238,6 +245,7 @@ static void MX_GPIO_Init(void)
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET);
@@ -264,17 +272,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-/**
-  * @brief  GPIO 外部中断回调（由 HAL_GPIO_EXTI_IRQHandler 调用�?
-  * @param  GPIO_Pin 触发中断的引�?
-  * @note   本函数在中断上下文中执行，应尽量短小、不要用 HAL_Delay�?
-  */
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-  /* 中断里只做分发：消抖与“按下事件”的记录都在 Key 类内部完成，
-     真正的业务处理放到主循环（见下面的 KEY_Pressed() 轮询）。 */
-  KEY_EXTI_Handler(GPIO_Pin);
-}
+
 /* USER CODE END 4 */
 
 /**

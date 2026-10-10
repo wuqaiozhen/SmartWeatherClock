@@ -49,6 +49,9 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/Hardware/Led.cpp
     ${CMAKE_SOURCE_DIR}/Hardware/Key.cpp
+    ${CMAKE_SOURCE_DIR}/Hardware/uart.c
+    ${CMAKE_SOURCE_DIR}/Hardware/aht20.c
+    ${CMAKE_SOURCE_DIR}/Hardware/bmp280.c
 )
 
 # Add include paths
@@ -67,3 +70,4 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 
     # Add user defined libraries
 )
+ target_link_options(${CMAKE_PROJECT_NAME} PRIVATE -u _printf_float)
