@@ -52,6 +52,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/Hardware/uart.c
     ${CMAKE_SOURCE_DIR}/Hardware/aht20.c
     ${CMAKE_SOURCE_DIR}/Hardware/bmp280.c
+     ${CMAKE_SOURCE_DIR}/Hardware/st7789.c
 )
 
 # Add include paths
