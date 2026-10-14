@@ -27,6 +27,8 @@
 #include "aht20.h"
 #include "bmp280.h"
 #include "st7789.h"
+#include "font.h"
+#include "gui.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -119,6 +121,7 @@ uint32_t adc_P,adc_T;
 
  ST7789_Init();
  ST7789_FillColor(0xFF0000);   /* 红 (RGB888) */
+  DrawString(20, 20, "hello", 0x00FF00, 0xFF0000);
   /* USER CODE END 2 */
 
   /* Infinite loop */

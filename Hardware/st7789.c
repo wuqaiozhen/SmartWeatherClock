@@ -1,5 +1,4 @@
 #include "st7789.h"
-#include "main.h"
 #include "stm32f4xx_hal.h"
 #include "stm32f4xx_hal_gpio.h"
 #include "stm32f4xx_hal_spi.h"
@@ -7,120 +6,148 @@
 
 extern SPI_HandleTypeDef hspi2;
 
-static void ST7789_CS(uint8_t level)
-{
-    HAL_GPIO_WritePin(TFT_CS_GPIO_Port,  TFT_CS_Pin, level ? GPIO_PIN_SET : GPIO_PIN_RESET);
+static void ST7789_CS(uint8_t level) {
+  HAL_GPIO_WritePin(TFT_CS_GPIO_Port, TFT_CS_Pin,
+                    level ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
-static void ST7789_DC(uint8_t level)
-{
-    HAL_GPIO_WritePin(TFT_DC_GPIO_Port,  TFT_DC_Pin, level ? GPIO_PIN_SET : GPIO_PIN_RESET);
+static void ST7789_DC(uint8_t level) {
+  HAL_GPIO_WritePin(TFT_DC_GPIO_Port, TFT_DC_Pin,
+                    level ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
-static void ST7789_WriteByte(uint8_t data)
-{
-    HAL_SPI_Transmit(&hspi2, &data, 1, 100);
+static void ST7789_WriteByte(uint8_t data) {
+  HAL_SPI_Transmit(&hspi2, &data, 1, 100);
 }
 
-void ST7789_WriteCommand(uint8_t cmd)
-{
-    ST7789_CS(0);
-    ST7789_DC(0);
-    ST7789_WriteByte(cmd);
+void ST7789_WriteCommand(uint8_t cmd) {
+  ST7789_CS(0);
+  ST7789_DC(0);
+  ST7789_WriteByte(cmd);
 }
 
-void ST7789_WriteData(uint8_t data)
-{
-    ST7789_CS(0);
-    ST7789_DC(1);
-    ST7789_WriteByte(data);
+void ST7789_WriteData(uint8_t data) {
+  ST7789_CS(0);
+  ST7789_DC(1);
+  ST7789_WriteByte(data);
 }
-void ST7789_Reset(void)
-{
-    HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_RESET);
-    HAL_Delay(10);
-    HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_SET);
-    HAL_Delay(120);
+void ST7789_Reset(void) {
+  HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_RESET);
+  HAL_Delay(10);
+  HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_SET);
+  HAL_Delay(120);
 }
 
- void ST7789_Init(void)
-   {
-       /* 厂家复位时序 */
-       HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_RESET);
-       HAL_Delay(1000);
-       HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_SET);
-       HAL_Delay(1000);
+void ST7789_Init(void) {
+  /* 厂家复位时序 */
+  HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_RESET);
+  HAL_Delay(1000);
+  HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_SET);
+  HAL_Delay(1000);
 
-       ST7789_WriteCommand(0x11); HAL_Delay(120);          // Sleep Out
+  ST7789_WriteCommand(0x11);
+  HAL_Delay(120); // Sleep Out
 
-       ST7789_WriteCommand(0x2A);
-       ST7789_WriteData(0x00); ST7789_WriteData(0x00);
-       ST7789_WriteData(0x00); ST7789_WriteData(0xEF);
-       ST7789_WriteCommand(0x2B);
-       ST7789_WriteData(0x00); ST7789_WriteData(0x28);
-       ST7789_WriteData(0x01); ST7789_WriteData(0x17);
+  ST7789_WriteCommand(0x2A);
+  ST7789_WriteData(0x00);
+  ST7789_WriteData(0x00);
+  ST7789_WriteData(0x00);
+  ST7789_WriteData(0xEF);
+  ST7789_WriteCommand(0x2B);
+  ST7789_WriteData(0x00);
+  ST7789_WriteData(0x28);
+  ST7789_WriteData(0x01);
+  ST7789_WriteData(0x17);
 
-       ST7789_WriteCommand(0xB2);
-       ST7789_WriteData(0x0C); ST7789_WriteData(0x0C); ST7789_WriteData(0x00);
-       ST7789_WriteData(0x33); ST7789_WriteData(0x33);
+  ST7789_WriteCommand(0xB2);
+  ST7789_WriteData(0x0C);
+  ST7789_WriteData(0x0C);
+  ST7789_WriteData(0x00);
+  ST7789_WriteData(0x33);
+  ST7789_WriteData(0x33);
 
-       ST7789_WriteCommand(0x20);                          // 反色关
-       ST7789_WriteCommand(0xB7); ST7789_WriteData(0x56);
-       ST7789_WriteCommand(0xBB); ST7789_WriteData(0x18);
-       ST7789_WriteCommand(0xC0); ST7789_WriteData(0x2C);
-       ST7789_WriteCommand(0xC2); ST7789_WriteData(0x01);
-       ST7789_WriteCommand(0xC3); ST7789_WriteData(0x1F);
-       ST7789_WriteCommand(0xC4); ST7789_WriteData(0x20);
-       ST7789_WriteCommand(0xC6); ST7789_WriteData(0x0F);
-       ST7789_WriteCommand(0xD0); ST7789_WriteData(0xA6); ST7789_WriteData(0xA1);
+  ST7789_WriteCommand(0x20); // 反色关
+  ST7789_WriteCommand(0xB7);
+  ST7789_WriteData(0x56);
+  ST7789_WriteCommand(0xBB);
+  ST7789_WriteData(0x18);
+  ST7789_WriteCommand(0xC0);
+  ST7789_WriteData(0x2C);
+  ST7789_WriteCommand(0xC2);
+  ST7789_WriteData(0x01);
+  ST7789_WriteCommand(0xC3);
+  ST7789_WriteData(0x1F);
+  ST7789_WriteCommand(0xC4);
+  ST7789_WriteData(0x20);
+  ST7789_WriteCommand(0xC6);
+  ST7789_WriteData(0x0F);
+  ST7789_WriteCommand(0xD0);
+  ST7789_WriteData(0xA6);
+  ST7789_WriteData(0xA1);
 
-       ST7789_WriteCommand(0xE0);
-       { const uint8_t g1[14]={0xD0,0x0D,0x14,0x0B,0x0B,0x07,0x3A,0x44,0x50,0x08,0x13,0x13,0x2D,0x32};
-         for(int i=0;i<14;i++) ST7789_WriteData(g1[i]); }
-       ST7789_WriteCommand(0xE1);
-       { const uint8_t g2[14]={0xD0,0x0D,0x14,0x0B,0x0B,0x07,0x3A,0x44,0x50,0x08,0x13,0x13,0x2D,0x32};
-         for(int i=0;i<14;i++) ST7789_WriteData(g2[i]); }
+  ST7789_WriteCommand(0xE0);
+  {
+    const uint8_t g1[14] = {0xD0, 0x0D, 0x14, 0x0B, 0x0B, 0x07, 0x3A,
+                            0x44, 0x50, 0x08, 0x13, 0x13, 0x2D, 0x32};
+    for (int i = 0; i < 14; i++)
+      ST7789_WriteData(g1[i]);
+  }
+  ST7789_WriteCommand(0xE1);
+  {
+    const uint8_t g2[14] = {0xD0, 0x0D, 0x14, 0x0B, 0x0B, 0x07, 0x3A,
+                            0x44, 0x50, 0x08, 0x13, 0x13, 0x2D, 0x32};
+    for (int i = 0; i < 14; i++)
+      ST7789_WriteData(g2[i]);
+  }
 
-       ST7789_WriteCommand(0x36); ST7789_WriteData(0x00);   // MADCTL
-       ST7789_WriteCommand(0x3A); ST7789_WriteData(0x55);   // 16bit RGB565
-       ST7789_WriteCommand(0xE7); ST7789_WriteData(0x00);   // 厂家有这条
+  ST7789_WriteCommand(0x36);
+  ST7789_WriteData(0x00); // MADCTL
+  ST7789_WriteCommand(0x3A);
+  ST7789_WriteData(0x55); // 16bit RGB565
+  ST7789_WriteCommand(0xE7);
+  ST7789_WriteData(0x00); // 厂家有这条
 
-       ST7789_WriteCommand(0x21);                          // 反色开
-       ST7789_WriteCommand(0x29);                          // 显示开
-       ST7789_WriteCommand(0x2C);                          // 内存写
-   }
-void ST7789_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
-{
-    /*---列---*/
-    ST7789_WriteCommand(0x2A);
-    ST7789_WriteData(x0>>8);
-    ST7789_WriteData(x0&0xff);
-    ST7789_WriteData(x1>>8);
-    ST7789_WriteData(x1&0xff);
+  ST7789_WriteCommand(0x21); // 反色开
+  ST7789_WriteCommand(0x29); // 显示开
+  ST7789_WriteCommand(0x2C); // 内存写
+}
+void ST7789_SetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
+  /*---列---*/
+  ST7789_WriteCommand(0x2A);
+  ST7789_WriteData(x0 >> 8);
+  ST7789_WriteData(x0 & 0xff);
+  ST7789_WriteData(x1 >> 8);
+  ST7789_WriteData(x1 & 0xff);
 
-    /*--- 行---*/
-    ST7789_WriteCommand(0x2B);
-    ST7789_WriteData(y0>>8);
-    ST7789_WriteData(y0 &0xff);
-    ST7789_WriteData(y1>>8);
-    ST7789_WriteData(y1&0xff);
-}   
-
-void ST7789_WriteDataBulk(uint8_t *buf, uint16_t len)
-{
-    ST7789_DC(1);
-    HAL_SPI_Transmit(&hspi2, buf, len, 1000);
+  /*--- 行---*/
+  ST7789_WriteCommand(0x2B);
+  ST7789_WriteData(y0 >> 8);
+  ST7789_WriteData(y0 & 0xff);
+  ST7789_WriteData(y1 >> 8);
+  ST7789_WriteData(y1 & 0xff);
 }
 
- void ST7789_FillColor(uint32_t color)
-   {
-       /* color 用 RGB888（如 红=0xFF0000）；内部转成 RGB565 发送（16bit 模式） */
-       static uint8_t buf[240*2];
-       uint16_t c565 = ((color >> 8) & 0xF800) | ((color >> 5) & 0x07E0) | ((color >> 3) & 0x001F);
-       for (int i=0;i<240*2;i+=2){ buf[i]=c565>>8; buf[i+1]=c565&0xff; }
+void ST7789_WriteDataBulk(uint8_t *buf, uint16_t len) {
+  ST7789_DC(1);
+  HAL_SPI_Transmit(&hspi2, buf, len, 1000);
+}
 
-       ST7789_SetWindow(0, 0, 239, 319);
-       ST7789_WriteCommand(0x2C);
-       for (int row=0; row<320; row++)
-           ST7789_WriteDataBulk(buf, 240*2);
-   }
+uint16_t ST7789_RGB888to565(
+    uint32_t color) { /* color 用 RGB888（如 红=0xFF0000）；内部转成 RGB565
+                         发送（16bit 模式） */
+  return (uint16_t) (((color >> 8) & 0xF800) | ((color >> 5) & 0x07E0) |
+                           ((color >> 3) & 0x001F));
+}
+
+void ST7789_FillColor(uint32_t color) {
+  static uint8_t buf[240 * 2];
+  uint16_t c565 = ST7789_RGB888to565(color);
+  for (int i = 0; i < 240 * 2; i += 2) {
+    buf[i] = c565 >> 8;
+    buf[i + 1] = c565 & 0xff;
+  }
+  ST7789_SetWindow(0, 0, 239, 319);
+  ST7789_WriteCommand(0x2C);
+  for (int row = 0; row < 320; row++)
+    ST7789_WriteDataBulk(buf, 240 * 2);
+}

@@ -53,11 +53,14 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/Hardware/aht20.c
     ${CMAKE_SOURCE_DIR}/Hardware/bmp280.c
      ${CMAKE_SOURCE_DIR}/Hardware/st7789.c
+      ${CMAKE_SOURCE_DIR}/GUI/font.c
+      ${CMAKE_SOURCE_DIR}/GUI/gui.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/Hardware
+     ${CMAKE_SOURCE_DIR}/GUI
 )
 
 # Add project symbols (macros)
