@@ -26,6 +26,7 @@
 #include <uart.h>
 #include "aht20.h"
 #include "bmp280.h"
+#include "esp32.h"
 #include "st7789.h"
 #include "font.h"
 #include "gui.h"
@@ -52,6 +53,7 @@ I2C_HandleTypeDef hi2c1;
 SPI_HandleTypeDef hspi2;
 
 UART_HandleTypeDef huart1;
+UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
@@ -63,6 +65,7 @@ static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_SPI2_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -104,6 +107,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_I2C1_Init();
   MX_SPI2_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
    float t, h;
    if(AHT20_Read(&t, &h) == 0)
@@ -120,8 +124,13 @@ uint32_t adc_P,adc_T;
  printf("BMP280 temp=%d.%02d C press=%u.%02u hPa\r\n" ,temp/100,temp % 100,press/100,press%100);
 
  ST7789_Init();
- ST7789_FillColor(0xFF0000);   /* 红 (RGB888) */
+ ST7789_FillColor(0xFF0000);   /* �? (RGB888) */
   DrawString(20, 20, "hello", 0x00FF00, 0xFF0000);
+
+  /* ---- ESP32 串口链路握手验证 ---- */
+  ESP32_Init();
+  ESP32_SendCommand("PING");        /* 试探命令，可改成 ESP32 固件支持的指令 */
+  printf("[ESP32] TX: PING\r\n");
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -132,6 +141,12 @@ uint32_t adc_P,adc_T;
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+      /* 把 ESP32 的一整行日志/数据转发到调试串口(USART1)，按行打印 */
+      char line[128];
+      if (ESP32_GetLine(line, sizeof(line)))
+      {
+          printf("[ESP32] %s\r\n", line);
+      }
       
   }
   /* USER CODE END 3 */
@@ -285,6 +300,39 @@ static void MX_USART1_UART_Init(void)
   /* USER CODE BEGIN USART1_Init 2 */
 
   /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
 
 }
 
