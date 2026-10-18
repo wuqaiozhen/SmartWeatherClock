@@ -1,0 +1,20 @@
+{
+  // ESP-IDF (esp32s3 / wifi_station) 调试配置：由 ESP-IDF 扩展提供 gdbtarget 适配器，
+  // 调试时扩展会自动带上 gdb 路径、program(build/wifi_station.elf)、openocd 配置和 initCommands。
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // 只调试已经烧录好的固件：自动启动 OpenOCD 并停在 app_main
+      "name": "ESP-IDF Debug (attach)",
+      "type": "gdbtarget",
+      "request": "attach"
+    },
+    {
+      // 每次 F5 先 Build + Flash，再进入调试（首次使用建议这个）
+      "name": "ESP-IDF Debug (build & flash)",
+      "type": "gdbtarget",
+      "request": "attach",
+      "buildFlashMonitor": true
+    }
+  ]
+}

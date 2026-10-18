@@ -1,0 +1,2 @@
+source D:/esp/projects/weather/build/gdbinit/symbols
+source D:/esp/projects/weather/build/gdbinit/connect

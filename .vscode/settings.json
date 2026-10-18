@@ -1,0 +1,21 @@
+{
+    "idf.currentSetup": "D:\\esp\\Espressif\\frameworks\\esp-idf-v5.4.4",
+    "idf.customExtraVars": {
+        "IDF_PATH": "D:\\esp\\Espressif\\frameworks\\esp-idf-v5.4.4",
+        "IDF_TOOLS_PATH": "D:\\esp\\Espressif",
+        "IDF_PYTHON_ENV_PATH": "D:\\esp\\Espressif\\python_env\\idf5.4_py3.11_env"
+    },
+    "idf.port": "COM9",
+    "idf.monitorPort": "COM10",
+    "idf.flashBaudRate": "460800",
+    "clangd.path": "D:\\esp\\Espressif\\tools\\esp-clang\\esp-18.1.2_20240912\\esp-clang\\bin\\clangd.exe",
+    "clangd.arguments": [
+      "--background-index",
+      "--query-driver=**",
+      "--compile-commands-dir=d:\\esp\\projects\\weather\\build"
+    ],
+    "idf.flashType": "UART",
+    "idf.openOcdConfigs": [
+      "board/esp32s3-builtin.cfg"
+    ]
+}
