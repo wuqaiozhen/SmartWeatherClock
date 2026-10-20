@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "wifi_station",
-    "project_version":    "1",
+    "project_version":    "f1757b1-dirty",
     "project_path":       "D:/esp/projects/weather",
     "idf_path":           "D:/esp/Espressif/frameworks/esp-idf-v5.4.4",
     "build_dir":          "D:/esp/projects/weather/build",
@@ -1210,7 +1210,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "file": "D:/esp/projects/weather/build/esp-idf/main/libmain.a",
-            "sources": [ "D:/esp/projects/weather/main/wifi.c", "D:/esp/projects/weather/main/uart_proto.c", "D:/esp/projects/weather/main/station_example_main.c" ],
+            "sources": [ "D:/esp/projects/weather/main/weather.c", "D:/esp/projects/weather/main/wifi.c", "D:/esp/projects/weather/main/uart_proto.c", "D:/esp/projects/weather/main/station_example_main.c" ],
             "include_dirs": [ "." ]
         },
         "mbedtls": {

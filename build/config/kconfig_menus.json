@@ -31352,10 +31352,7 @@
                                         "help": "This config helps to set the interrupt priority level for the MPI peripheral.\nValue 0 (default) means that there is no preference regarding the interrupt\npriority level and any level from 1 to 3 can be selected (based on the availability).\nNote: Higher value indicates high interrupt priority.",
                                         "id": "MBEDTLS_MPI_INTERRUPT_LEVEL",
                                         "name": "MBEDTLS_MPI_INTERRUPT_LEVEL",
-                                        "range": [
-                                            0,
-                                            3
-                                        ],
+                                        "range": null,
                                         "title": "MPI hardware interrupt level",
                                         "type": "int"
                                     }

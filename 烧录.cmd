@@ -1,4 +1,10 @@
 @echo off
+REM ---------------------------------------------------------------
+REM  1) Kill any running log reader (read_log.py) that locks COM9
+REM ---------------------------------------------------------------
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*read_log*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+timeout /t 1 /nobreak >nul
+
 call "D:\esp\Espressif\frameworks\esp-idf-v5.4.4\export.bat"
 if errorlevel 1 goto fail
 
@@ -9,7 +15,6 @@ if errorlevel 1 goto fail
 echo.
 echo ==========================================
 echo   [OK] FLASH SUCCESS
-echo   Now open:  kanrizhi  (see below)
 echo ==========================================
 goto end
 
@@ -19,10 +24,8 @@ echo ==========================================
 echo   [FAIL] FLASH FAILED
 echo.
 echo   Common causes:
-echo    1. The log window is still open and locks COM9
-echo       -^> Press Ctrl+C in that window, or close it
-echo    2. Wrong port
-echo       -^> Check Device Manager
+echo    1. Port still busy (close all log windows)
+echo    2. Wrong port (check Device Manager)
 echo    3. Board not in download mode
 echo       -^> Hold BOOT, tap RST, release BOOT
 echo ==========================================

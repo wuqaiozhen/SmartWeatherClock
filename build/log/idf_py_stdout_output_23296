@@ -1,0 +1,77 @@
+[1/5] C:\Windows\system32\cmd.exe /C "cd /D D:\esp\projects\weather\build\esp-idf\esptool_py && D:\esp\Espressif\python_env\idf5.4_py3.11_env\Scripts\python.exe D:/esp/Espressif/frameworks/esp-idf-v5.4.4/components/partition_table/check_sizes.py --offset 0x8000 partition --type app D:/esp/projects/weather/build/partition_table/partition-table.bin D:/esp/projects/weather/build/wifi_station.bin"
+wifi_station.bin binary size 0xde410 bytes. Smallest app partition is 0x177000 bytes. 0x98bf0 bytes (41%) free.
+[2/5] Performing build step for 'bootloader'
+[1/1] C:\Windows\system32\cmd.exe /C "cd /D D:\esp\projects\weather\build\bootloader\esp-idf\esptool_py && D:\esp\Espressif\python_env\idf5.4_py3.11_env\Scripts\python.exe D:/esp/Espressif/frameworks/esp-idf-v5.4.4/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x0 D:/esp/projects/weather/build/bootloader/bootloader.bin"
+Bootloader binary size 0x51d0 bytes. 0x2e30 bytes (36%) free.
+[3/5] No install step for 'bootloader'
+[4/5] Completed 'bootloader'
+[4/5] C:\Windows\system32\cmd.exe /C "cd /D D:\esp\Espressif\frameworks\esp-idf-v5.4.4\components\esptool_py && D:\esp\Espressif\tools\cmake\3.30.2\bin\cmake.exe -D IDF_PATH=D:/esp/Espressif/frameworks/esp-idf-v5.4.4 -D SERIAL_TOOL=D:/esp/Espressif/python_env/idf5.4_py3.11_env/Scripts/python.exe;;D:/esp/Espressif/frameworks/esp-idf-v5.4.4/components/esptool_py/esptool/esptool.py;--chip;esp32s3 -D SERIAL_TOOL_ARGS=--before=default_reset;--after=hard_reset;write_flash;@flash_args -D WORKING_DIRECTORY=D:/esp/projects/weather/build -P D:/esp/Espressif/frameworks/esp-idf-v5.4.4/components/esptool_py/run_serial_tool.cmake"
+esptool.py --chip esp32s3 -p COM9 -b 460800 --before=default_reset --after=hard_reset write_flash --flash_mode dio --flash_freq 80m --flash_size 16MB 0x0 bootloader/bootloader.bin 0x10000 wifi_station.bin 0x8000 partition_table/partition-table.bin
+esptool.py v4.11.0
+Serial port COM9
+Connecting...
+Chip is ESP32-S3 (QFN56) (revision v0.2)
+Features: WiFi, BLE, Embedded PSRAM 8MB (AP_3v3)
+Crystal is 40MHz
+USB mode: USB-Serial/JTAG
+MAC: 7c:4f:ad:22:15:b8
+Uploading stub...
+Running stub...
+Stub running...
+Changing baud rate to 460800
+Changed.
+Configuring flash size...
+Flash will be erased from 0x00000000 to 0x00005fff...
+Flash will be erased from 0x00010000 to 0x000eefff...
+Flash will be erased from 0x00008000 to 0x00008fff...
+SHA digest in image updated
+Compressed 20944 bytes to 13317...
+Writing at 0x00000000... (100 %)
+Wrote 20944 bytes (13317 compressed) at 0x00000000 in 0.2 seconds (effective 715.0 kbit/s)...
+Hash of data verified.
+Compressed 910352 bytes to 578384...
+Writing at 0x00010000... (2 %)
+Writing at 0x0001cd39... (5 %)
+Writing at 0x0002587b... (8 %)
+Writing at 0x0002a604... (11 %)
+Writing at 0x0002f6f7... (13 %)
+Writing at 0x00034f23... (16 %)
+Writing at 0x0003e0d3... (19 %)
+Writing at 0x00044c6d... (22 %)
+Writing at 0x0004b43e... (25 %)
+Writing at 0x0005195c... (27 %)
+Writing at 0x00057769... (30 %)
+Writing at 0x0005d354... (33 %)
+Writing at 0x0006316c... (36 %)
+Writing at 0x00069299... (38 %)
+Writing at 0x0006f1c8... (41 %)
+Writing at 0x0007451c... (44 %)
+Writing at 0x00079b46... (47 %)
+Writing at 0x0007f255... (50 %)
+Writing at 0x00084881... (52 %)
+Writing at 0x00089d28... (55 %)
+Writing at 0x0008f930... (58 %)
+Writing at 0x000956fd... (61 %)
+Writing at 0x0009b05f... (63 %)
+Writing at 0x000a0caf... (66 %)
+Writing at 0x000a6a8d... (69 %)
+Writing at 0x000ac551... (72 %)
+Writing at 0x000b2122... (75 %)
+Writing at 0x000b8441... (77 %)
+Writing at 0x000bdb41... (80 %)
+Writing at 0x000c2fdd... (83 %)
+Writing at 0x000cc5b6... (86 %)
+Writing at 0x000d2433... (88 %)
+Writing at 0x000dab41... (91 %)
+Writing at 0x000e0b54... (94 %)
+Writing at 0x000e721a... (97 %)
+Writing at 0x000ec282... (100 %)
+Wrote 910352 bytes (578384 compressed) at 0x00010000 in 6.0 seconds (effective 1206.2 kbit/s)...
+Hash of data verified.
+Compressed 3072 bytes to 105...
+Writing at 0x00008000... (100 %)
+Wrote 3072 bytes (105 compressed) at 0x00008000 in 0.0 seconds (effective 728.3 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...
