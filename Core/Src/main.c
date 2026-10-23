@@ -1,20 +1,20 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2026 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file           : main.c
+ * @brief          : Main program body
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2026 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
@@ -23,13 +23,16 @@
 /* USER CODE BEGIN Includes */
 #include <stdint.h>
 #include <stdio.h>
-#include <uart.h>
+#include "uart.h"
 #include "aht20.h"
 #include "bmp280.h"
 #include "esp32.h"
 #include "st7789.h"
 #include "font.h"
 #include "gui.h"
+#include <stdbool.h>
+#include <string.h>
+#include "icon_wifi.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,7 +59,22 @@ UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+/* ---------- 屏幕配色 (RGB888) ---------- */
+#define C_BG 0x0A1224   /* 屏幕背景: 深蓝黑 */
+#define C_CARD 0xEBF2FA /* 卡片背景: 浅蓝白 */
+#define C_TEXT 0x12265A /* 深色文字 (标题/标签) */
+#define C_BLUE 0x1955C8 /* 蓝色 (时间/室内温度) */
+#define C_CYAN 0x0091C3 /* 青色 (室外信息) */
 
+/* ---------- 中文码点数组 (UTF-16, 以 0 结尾) ---------- */
+/* 注意: 结尾的 0 不能省略, DrawTextCN 靠它判断结束 */
+static const uint16_t TXT_INDOOR[] = {0x5BA4, 0x5185, 0x73AF, 0x5883, 0}; /* 室内环境 */
+static const uint16_t TXT_SUZHOU[] = {0x82CF, 0x5DDE, 0};                 /* 苏州 */
+static const uint16_t TXT_WED[] = {0x661F, 0x671F, 0x4E09, 0};            /* 星期三 */
+
+static int g_temp_x10;
+static char g_weather_text[32];
+static bool g_weather_ok;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -72,13 +90,40 @@ static void MX_USART2_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-   
+/* 画静态界面: 背景 + 三张卡片 + 卡片①②的内容 */
+static void ui_draw_static(void)
+{
+  /* ===== 阶段 A: 背景 + 三张卡片 ===== */
+  ST7789_FillColor(C_BG);
+
+  FillRect(6, 6, 228, 144, C_CARD);     /* 卡片① 时间区 */
+  FillRect(6, 155, 108, 159, C_CARD);   /* 卡片② 室内区 */
+  FillRect(126, 155, 108, 159, C_CARD); /* 卡片③ 室外区 */
+
+  /* ===== 阶段 B: 卡片① 内容 ===== */
+  DrawBitmap(14, 12, wifi_icon, 24, 24, C_TEXT, C_CARD); /* WiFi 图标 */
+  DrawString(48, 8, "SUZHOU", C_TEXT, C_CARD);           /* 城市名 */
+  DrawTextBig(10, 42, "18:11:35", C_BLUE, C_CARD);       /* 大号时间 */
+  DrawString(14, 100, "2026.10.21", C_TEXT, C_CARD);     /* 日期 */
+  DrawTextCN(178, 108, TXT_WED, C_TEXT, C_CARD);         /* 星期三 */
+
+  /* ===== 阶段 C: 卡片② 室内区 ===== */
+  DrawTextCN(12, 160, TXT_INDOOR, C_TEXT, C_CARD); /* 室内环境 */
+  DrawString(12, 186, "20.5C", C_BLUE, C_CARD);    /* 室内温度 */
+  DrawString(12, 224, "47%RH", C_BLUE, C_CARD);    /* 湿度 */
+  DrawString(12, 262, "1027mb", C_BLUE, C_CARD);   /* 气压 */
+
+   /* ===== 阶段 D: 卡片② 室外区 ===== */
+  DrawTextCN(132, 160, TXT_SUZHOU, C_TEXT, C_CARD);
+   DrawString(132, 270, "10.0C", C_CYAN, C_CARD);
+   DrawString(132, 232, "Cloudy", C_CYAN, C_CARD);
+}
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
-  * @retval int
-  */
+ * @brief  The application entry point.
+ * @retval int
+ */
 int main(void)
 {
 
@@ -106,31 +151,31 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   MX_I2C1_Init();
+  HAL_Delay(100);
   MX_SPI2_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-   float t, h;
-   if(AHT20_Read(&t, &h) == 0)
-    printf("AHT20: temp=%.2f C, humi=%.2f %%\r\n",t,h);
+  float t, h;
+  if (AHT20_Read(&t, &h) == 0)
+    printf("AHT20: temp=%.2f C, humi=%.2f %%\r\n", t, h);
   else
-   printf("AHT20 read failed\r\n");
-  
-uint32_t adc_P,adc_T;
+    printf("AHT20 read failed\r\n");
+
+  uint32_t adc_P, adc_T;
   BMP280_ReadCalib();
   BMP280_WriteReg(0xf4, 0x27);
-  BMP280_ReadData(&adc_P,&adc_T);
- int32_t temp = BMP280_CompensateTemp((int32_t)adc_T);
- uint32_t press = BMP280_CompensatePress((int32_t)adc_P);
- printf("BMP280 temp=%d.%02d C press=%u.%02u hPa\r\n" ,temp/100,temp % 100,press/100,press%100);
+  HAL_Delay(20);
+  BMP280_ReadData(&adc_P, &adc_T);
+  int32_t temp = BMP280_CompensateTemp((int32_t)adc_T);
+  uint32_t press = BMP280_CompensatePress((int32_t)adc_P);
+  printf("BMP280 temp=%ld.%02ld C press=%lu.%02lu hPa\r\n", temp / 100, temp % 100, press / 100, press % 100);
 
- ST7789_Init();
- ST7789_FillColor(0xFF0000);   /* �? (RGB888) */
-  DrawString(20, 20, "hello", 0x00FF00, 0xFF0000);
-
+  ST7789_Init();
+  ui_draw_static();
   /* ---- ESP32 串口链路握手验证 ---- */
   ESP32_Init();
-  ESP32_SendCommand("PING");        /* 试探命令，可改成 ESP32 固件支持的指令 */
-  printf("[ESP32] TX: PING\r\n");
+  ESP32_SendCommand("GET_WEATHER"); /* 试探命令，可改成 ESP32 固件支持的指令 */
+  printf("[ESP32] TX: GET_WEATHER\r\n");
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -141,34 +186,60 @@ uint32_t adc_P,adc_T;
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-      /* 把 ESP32 的一整行日志/数据转发到调试串口(USART1)，按行打印 */
-      char line[128];
-      if (ESP32_GetLine(line, sizeof(line)))
+    /* 把 ESP32 的一整行日志/数据转发到调试串口(USART1)，按行打印 */
+    char line[128];
+    if (ESP32_GetLine(line, sizeof(line)))
+    {
+      printf("[ESP32] %s\r\n", line);
+      if (strncmp(line, "$W", 2) == 0)
       {
-          printf("[ESP32] %s\r\n", line);
+        int t = 0;
+        char wtext[32] = {0};
+        int n = sscanf(line, "$W,%d,%31[^\n]", &t, wtext);
+        if (n == 2)
+        {
+          if (t <= 1250 && t >= -550)
+          {
+            g_temp_x10 = t;
+            snprintf(g_weather_text, sizeof(g_weather_text), "%s", wtext);
+            int neg = (t < 0);
+            int a = neg ? -t : t;
+            printf("[TEMPERATURE] %s%d.%d C,[weather] %s\r\n",
+                   neg ? "-" : "", a / 10, a % 10, wtext);
+            g_weather_ok = 1;
+          }
+          else
+          {
+            printf("[WEATHER] 数据超出范围: t=%d wtext=%s\r\n", t, wtext);
+          }
+        }
+        else
+        {
+          printf("[WEATHER] 打印失败 sscanf返回%d\r\n", n);
+        }
       }
-      
+    }
   }
-  /* USER CODE END 3 */
 }
+/* USER CODE END 3 */
 
 /**
-  * @brief System Clock Configuration
-  * @retval None
-  */
+ * @brief System Clock Configuration
+ * @retval None
+ */
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
   /** Configure the main internal regulator output voltage
-  */
+   */
   __HAL_RCC_PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
   /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
+   * in the RCC_OscInitTypeDef structure.
+   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
@@ -184,9 +255,8 @@ void SystemClock_Config(void)
   }
 
   /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+   */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
@@ -199,10 +269,10 @@ void SystemClock_Config(void)
 }
 
 /**
-  * @brief I2C1 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief I2C1 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_I2C1_Init(void)
 {
 
@@ -229,14 +299,13 @@ static void MX_I2C1_Init(void)
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
-
 }
 
 /**
-  * @brief SPI2 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief SPI2 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_SPI2_Init(void)
 {
 
@@ -267,14 +336,13 @@ static void MX_SPI2_Init(void)
   /* USER CODE BEGIN SPI2_Init 2 */
 
   /* USER CODE END SPI2_Init 2 */
-
 }
 
 /**
-  * @brief USART1 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief USART1 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_USART1_UART_Init(void)
 {
 
@@ -300,14 +368,13 @@ static void MX_USART1_UART_Init(void)
   /* USER CODE BEGIN USART1_Init 2 */
 
   /* USER CODE END USART1_Init 2 */
-
 }
 
 /**
-  * @brief USART2 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief USART2 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_USART2_UART_Init(void)
 {
 
@@ -333,19 +400,18 @@ static void MX_USART2_UART_Init(void)
   /* USER CODE BEGIN USART2_Init 2 */
 
   /* USER CODE END USART2_Init 2 */
-
 }
 
 /**
-  * @brief GPIO Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief GPIO Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-/* USER CODE BEGIN MX_GPIO_Init_1 */
-/* USER CODE END MX_GPIO_Init_1 */
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
+  /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
@@ -359,7 +425,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(TFT_DC_GPIO_Port, TFT_DC_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, TFT_BLK_Pin|TFT_CS_Pin|TFT_RST_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOB, TFT_BLK_Pin | TFT_CS_Pin | TFT_RST_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin : PA0 */
   GPIO_InitStruct.Pin = GPIO_PIN_0;
@@ -382,7 +448,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(TFT_DC_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : TFT_BLK_Pin TFT_CS_Pin TFT_RST_Pin */
-  GPIO_InitStruct.Pin = TFT_BLK_Pin|TFT_CS_Pin|TFT_RST_Pin;
+  GPIO_InitStruct.Pin = TFT_BLK_Pin | TFT_CS_Pin | TFT_RST_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
@@ -392,8 +458,8 @@ static void MX_GPIO_Init(void)
   HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI0_IRQn);
 
-/* USER CODE BEGIN MX_GPIO_Init_2 */
-/* USER CODE END MX_GPIO_Init_2 */
+  /* USER CODE BEGIN MX_GPIO_Init_2 */
+  /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
@@ -401,9 +467,9 @@ static void MX_GPIO_Init(void)
 /* USER CODE END 4 */
 
 /**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
+ * @brief  This function is executed in case of error occurrence.
+ * @retval None
+ */
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
@@ -415,14 +481,14 @@ void Error_Handler(void)
   /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
-  */
+ * @brief  Reports the name of the source file and the source line number
+ *         where the assert_param error has occurred.
+ * @param  file: pointer to the source file name
+ * @param  line: assert_param error line source number
+ * @retval None
+ */
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
