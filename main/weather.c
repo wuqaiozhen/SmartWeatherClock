@@ -6,14 +6,77 @@
 #include "esp_log.h"
 #include <stdbool.h>
 #include <string.h>
+#include <strings.h>
 
 
 #define WEATHER_URL                                                            \
   "https://api.seniverse.com/v3/weather/now.json"                              \
-  "?key=Sckfg5jmTv-yWuO1F&location=WTTDPCGXTWUS&language=zh-Hans&unit=c"
+  "?key=Sckfg5jmTv-yWuO1F&location=WTTDPCGXTWUS&language=en&unit=c"
 
 static const char *TAG = "weather";
 
+/* 把 seniverse 返回的长天气词，映射成 6 个字符以内的短词。
+ * STM32 端用 16x32 字体（最多 6 字符）显示天气，长词会被截断，
+ * 所以在这里先缩写。没匹配上的原样返回，由 STM32 截断。 */
+/* weather code -> ? STM32 ? k_weather ?????
+ *   0 ?      1 ??     2 ?       3 ??     4 ??
+ *   5 ??    6 ??     7 ???   8 ??     9 ??
+ *  10 ??   11 ???  12 ?      13 ?     14 ??
+ *  15 ?     99 ??
+ * ?????"??? -> ???", ??/??/????? STM32 ??,
+ * ??????????, ?? STM32 ??? */
+typedef struct {
+    const char *full;
+    int code;
+} weather_code_t;
+
+static const weather_code_t k_weather_code[] = {
+    {"sunny",          0},
+    {"clear",          0},
+    {"partly cloudy",  1},
+    {"mostly cloudy",  1},
+    {"cloudy",         1},
+    {"overcast",       2},
+    {"light rain",     3},
+    {"moderate rain",  4},
+    {"heavy rain",     5},
+    {"rainstorm",      6},
+    {"storm",          6},
+    {"thunderstorm",   7},
+    {"thundershower",  7},
+    {"light snow",     8},
+    {"moderate snow",  9},
+    {"heavy snow",    10},
+    {"snowstorm",     10},
+    {"sleet",         11},
+    {"rain and snow", 11},
+    {"freezing rain", 11},
+    {"fog",           12},
+    {"mist",          12},
+    {"haze",          13},
+    {"smog",          13},
+    {"dust",          14},
+    {"sand",          14},
+    {"sandstorm",     14},
+    {"windy",         15},
+    {"wind",          15},
+};
+
+/* ????? -> ???; ?????? 99 */
+static int weather_to_code(const char *full)
+{
+    unsigned i;
+
+    if (full == NULL) {
+        return 99;
+    }
+    for (i = 0; i < sizeof(k_weather_code) / sizeof(k_weather_code[0]); i++) {
+        if (strcasecmp(full, k_weather_code[i].full) == 0) {
+            return k_weather_code[i].code;
+        }
+    }
+    return 99;
+}
 bool weather_fetch(int *temp_x10, int *code) {
 
   bool ok = false;
@@ -78,16 +141,16 @@ bool weather_fetch(int *temp_x10, int *code) {
         }
 
         cJSON *t_item = cJSON_GetObjectItemCaseSensitive(now, "temperature");
-        cJSON *c_item = cJSON_GetObjectItemCaseSensitive(now, "code");
-        if (t_item == NULL || c_item == NULL) {
-          ESP_LOGE(TAG, "missing temperature or code");
+        cJSON *text_item = cJSON_GetObjectItemCaseSensitive(now, "text");
+        if (t_item == NULL || text_item == NULL) {
+          ESP_LOGE(TAG, "missing temperature or text");
           goto cleanup;
         }
 
         *temp_x10 = (int)(atof(t_item->valuestring) * 10.0f);
-        *code = atoi(c_item->valuestring);
+        *code = weather_to_code(text_item->valuestring);
         ok = true;
-         ESP_LOGI(TAG, "temp=%d.%d C, code=%d", *temp_x10/10, *temp_x10%10, *code);
+        ESP_LOGI(TAG, "temp_x10=%d, text=[%s] -> code=%d", *temp_x10, text_item->valuestring, *code);
 
       cleanup:
         if (root != NULL) {

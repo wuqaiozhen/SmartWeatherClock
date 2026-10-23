@@ -30,10 +30,10 @@ void app_main(void) {
         uart_send_line("$PONG");
         ESP_LOGI(TAG, "TX: $PONG");
       } else if (strcmp(line, "GET_WEATHER") == 0) {
-        int t = 0, c = 0;
-        if (weather_fetch(&t, &c)) {
+        int t = 0, code = 99;
+        if (weather_fetch(&t, &code)) {
           char buf[48];
-          snprintf(buf, sizeof(buf), "$W,%d,%d", t, c);
+          snprintf(buf, sizeof(buf), "$W,%d,%d", t, code);
           uart_send_line(buf);
           ESP_LOGI(TAG, "TX: %s", buf);
         } else {
