@@ -94,7 +94,7 @@ void DrawBitmap(uint16_t x, uint16_t y, const uint8_t *data,
     for (int col = 0; col < w; col++)
     {
 
-      int byteidx = row * (w / 8) + col / 8;
+      int byteidx = row * ((w + 7) / 8) + col / 8;  /* ??? 8 ??(?12)?????? */
       int bit = 7 - (col % 8);
 
       uint16_t color = (data[byteidx] & (1 << bit)) ? c_fg : c_bg;
@@ -149,4 +149,62 @@ void DrawBitmap(uint16_t x, uint16_t y, const uint8_t *data,
      x += 16;
      codes++;
   }
+ }
+ /* 32x32 ???: ?????? */
+ void DrawTextCN32(uint16_t x, uint16_t y, const uint16_t *codes, uint32_t fg, uint32_t bg){
+  while(*codes != 0){
+     const uint8_t *glyph = cn32_font_find(*codes);
+     if( glyph == NULL){
+       x += 32;
+       codes++;
+       continue;
+     }
+     DrawBitmap(x, y, glyph, 32, 32, fg, bg);
+     x += 32;
+     codes++;
+  }
+ }
+ /* 12x24 ASCII: ??????? */
+ void DrawTextMid(uint16_t x, uint16_t y, const char *s, uint32_t fg, uint32_t bg){
+  while(*s != 0){
+     const uint8_t *glyph = font_mid_find((uint8_t)*s);
+     if( glyph == NULL){
+       x += 12;
+       s++;
+       continue;
+     }
+     DrawBitmap(x, y, glyph, 12, 24, fg, bg);
+     x += 12;
+     s++;
+  }
+ }
+
+ /* 24x24 ??? */
+ void DrawTextCN24(uint16_t x, uint16_t y, const uint16_t *codes, uint32_t fg, uint32_t bg){
+  while(*codes != 0){
+     const uint8_t *glyph = font_cn24_find(*codes);
+     if( glyph == NULL){
+       x += 24;
+       codes++;
+       continue;
+     }
+     DrawBitmap(x, y, glyph, 24, 24, fg, bg);
+     x += 24;
+     codes++;
+  }
+ }
+ /* ????: ??? 2 ?? RGB565 (?????, ??? SPI) */
+ void DrawBitmapColor(uint16_t x, uint16_t y, const uint16_t *data, uint16_t w, uint16_t h){
+  if(data == 0 || w == 0 || h == 0) return;
+  if((uint32_t)w * h > 48u * 48u) return;          /* ??????? */
+
+  static uint8_t buf[48 * 48 * 2];
+  uint32_t n = (uint32_t)w * h;
+  for(uint32_t i = 0; i < n; i++){
+     buf[i * 2]     = (uint8_t)(data[i] >> 8);
+     buf[i * 2 + 1] = (uint8_t)(data[i] & 0xFF);
+  }
+  ST7789_SetWindow(x, y, x + w - 1, y + h - 1);
+  ST7789_WriteCommand(0x2C);
+  ST7789_WriteDataBulk(buf, n * 2);
  }

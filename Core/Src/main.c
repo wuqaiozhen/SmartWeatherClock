@@ -33,6 +33,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "icon_wifi.h"
+#include "ui.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -59,22 +60,11 @@ UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-/* ---------- 屏幕配色 (RGB888) ---------- */
-#define C_BG 0x0A1224   /* 屏幕背景: 深蓝黑 */
-#define C_CARD 0xEBF2FA /* 卡片背景: 浅蓝白 */
-#define C_TEXT 0x12265A /* 深色文字 (标题/标签) */
-#define C_BLUE 0x1955C8 /* 蓝色 (时间/室内温度) */
-#define C_CYAN 0x0091C3 /* 青色 (室外信息) */
-
-/* ---------- 中文码点数组 (UTF-16, 以 0 结尾) ---------- */
-/* 注意: 结尾的 0 不能省略, DrawTextCN 靠它判断结束 */
-static const uint16_t TXT_INDOOR[] = {0x5BA4, 0x5185, 0x73AF, 0x5883, 0}; /* 室内环境 */
-static const uint16_t TXT_SUZHOU[] = {0x82CF, 0x5DDE, 0};                 /* 苏州 */
-static const uint16_t TXT_WED[] = {0x661F, 0x671F, 0x4E09, 0};            /* 星期三 */
-
 static int g_temp_x10;
-static char g_weather_text[32];
+static int g_weather_code = 99;   /* weather code, 99 = unknown */
 static bool g_weather_ok;
+static uint32_t last_sensor_ms = 0;
+static uint32_t last_weather_ms = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -90,34 +80,6 @@ static void MX_USART2_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-/* 画静态界面: 背景 + 三张卡片 + 卡片①②的内容 */
-static void ui_draw_static(void)
-{
-  /* ===== 阶段 A: 背景 + 三张卡片 ===== */
-  ST7789_FillColor(C_BG);
-
-  FillRect(6, 6, 228, 144, C_CARD);     /* 卡片① 时间区 */
-  FillRect(6, 155, 108, 159, C_CARD);   /* 卡片② 室内区 */
-  FillRect(126, 155, 108, 159, C_CARD); /* 卡片③ 室外区 */
-
-  /* ===== 阶段 B: 卡片① 内容 ===== */
-  DrawBitmap(14, 12, wifi_icon, 24, 24, C_TEXT, C_CARD); /* WiFi 图标 */
-  DrawString(48, 8, "SUZHOU", C_TEXT, C_CARD);           /* 城市名 */
-  DrawTextBig(10, 42, "18:11:35", C_BLUE, C_CARD);       /* 大号时间 */
-  DrawString(14, 100, "2026.10.21", C_TEXT, C_CARD);     /* 日期 */
-  DrawTextCN(178, 108, TXT_WED, C_TEXT, C_CARD);         /* 星期三 */
-
-  /* ===== 阶段 C: 卡片② 室内区 ===== */
-  DrawTextCN(12, 160, TXT_INDOOR, C_TEXT, C_CARD); /* 室内环境 */
-  DrawString(12, 186, "20.5C", C_BLUE, C_CARD);    /* 室内温度 */
-  DrawString(12, 224, "47%RH", C_BLUE, C_CARD);    /* 湿度 */
-  DrawString(12, 262, "1027mb", C_BLUE, C_CARD);   /* 气压 */
-
-   /* ===== 阶段 D: 卡片② 室外区 ===== */
-  DrawTextCN(132, 160, TXT_SUZHOU, C_TEXT, C_CARD);
-   DrawString(132, 270, "10.0C", C_CYAN, C_CARD);
-   DrawString(132, 232, "Cloudy", C_CYAN, C_CARD);
-}
 /* USER CODE END 0 */
 
 /**
@@ -171,7 +133,7 @@ int main(void)
   printf("BMP280 temp=%ld.%02ld C press=%lu.%02lu hPa\r\n", temp / 100, temp % 100, press / 100, press % 100);
 
   ST7789_Init();
-  ui_draw_static();
+  ui_init();
   /* ---- ESP32 串口链路握手验证 ---- */
   ESP32_Init();
   ESP32_SendCommand("GET_WEATHER"); /* 试探命令，可改成 ESP32 固件支持的指令 */
@@ -190,27 +152,24 @@ int main(void)
     char line[128];
     if (ESP32_GetLine(line, sizeof(line)))
     {
-      printf("[ESP32] %s\r\n", line);
+ printf("[RX] %s\r\n", line);
       if (strncmp(line, "$W", 2) == 0)
       {
         int t = 0;
-        char wtext[32] = {0};
-        int n = sscanf(line, "$W,%d,%31[^\n]", &t, wtext);
+        int code = 99;
+        int n = sscanf(line, "$W,%d,%d", &t, &code);
         if (n == 2)
         {
-          if (t <= 1250 && t >= -550)
+          if (t <= 1250 && t >= -550 && code >= 0 && code <= 99)
           {
             g_temp_x10 = t;
-            snprintf(g_weather_text, sizeof(g_weather_text), "%s", wtext);
-            int neg = (t < 0);
-            int a = neg ? -t : t;
-            printf("[TEMPERATURE] %s%d.%d C,[weather] %s\r\n",
-                   neg ? "-" : "", a / 10, a % 10, wtext);
+            g_weather_code = code;
             g_weather_ok = 1;
+            ui_update_weather(g_temp_x10, g_weather_code);
           }
           else
           {
-            printf("[WEATHER] 数据超出范围: t=%d wtext=%s\r\n", t, wtext);
+            printf("[WEATHER] 数据超出范围: t=%d code=%d\r\n", t, code);
           }
         }
         else
@@ -219,6 +178,21 @@ int main(void)
         }
       }
     }
+    if ((HAL_GetTick() - last_sensor_ms )>= 2000)
+    {
+      last_sensor_ms += 2000;
+      float st, sh;
+      if (AHT20_Read(&st, &sh) == 0)
+      {
+        ui_update_indoor(st, sh, press);
+      }
+    }
+     if (HAL_GetTick() - last_weather_ms >= 30000)
+   {
+       last_weather_ms += 30000;
+       ESP32_SendCommand("GET_WEATHER");
+   }
+    HAL_Delay(1);
   }
 }
 /* USER CODE END 3 */
