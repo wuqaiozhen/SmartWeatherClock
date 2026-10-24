@@ -1,6 +1,7 @@
 #include "ui.h"
 #include "gui.h"
 #include "icon_wifi.h"
+#include "icon_degc.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
@@ -36,17 +37,22 @@
 #define TXT3_W      98       /* 卡片③ 可用宽度 (129..227) */
 
 /* 卡片③ 竖向排布 */
-#define LBL_Y       160      /* 室外环境 (16x16) */
-#define ICON_X      154      /* 图标居中: 129 + (98-48)/2 */
-#define ICON_Y      176      /* 图标 48x48 */
+#define LBL_Y       160      /* card2 title (16x16) */
+#define ICON_X      146      /* 图标居中: 129 + (98-64)/2 */
+#define ICON_Y      160      /* icon 64x64 */
 #define WORD_Y      230      /* 天气中文 (24x24) */
 #define OTEMP_Y     270      /* 室外温度 (16x32) */
 
 /* ================= 中文码点 ================= */
 static const uint16_t TXT_INDOOR[] = {0x5BA4, 0x5185, 0x73AF, 0x5883, 0};   /* 室内环境 */
-static const uint16_t TXT_OUTDOOR[] = {0x5BA4, 0x5916, 0x73AF, 0x5883, 0};  /* 室外环境 */
 static const uint16_t TXT_SUZHOU[] = {0x82CF, 0x5DDE, 0};                   /* 苏州 */
+static const uint16_t TXT_SUN[]    = {0x661F, 0x671F, 0x65E5, 0}; 
+static const uint16_t TXT_MON[]    = {0x661F, 0x671F, 0x4E00, 0}; 
+static const uint16_t TXT_TUE[]    = {0x661F, 0x671F, 0x4E8C, 0}; 
 static const uint16_t TXT_WED[]    = {0x661F, 0x671F, 0x4E09, 0};           /* 星期三 */
+static const uint16_t TXT_THU[]    = {0x661F, 0x671F, 0x56DB, 0}; 
+static const uint16_t TXT_FRI[]    = {0x661F, 0x671F, 0x4E94, 0}; 
+static const uint16_t TXT_SAT[]    = {0x661F, 0x671F, 0x516D, 0}; 
 
 /* 天气词 */
 static const uint16_t WT_SUNNY[]   = {0x6674, 0};                           /* 晴 */
@@ -96,19 +102,51 @@ static const weather_info_t k_weather[] = {
 
 #define WEATHER_TABLE_LEN  (sizeof(k_weather) / sizeof(k_weather[0]))
 
+ static const uint16_t *TXT_WEEK[7] = { TXT_SUN, TXT_MON, TXT_TUE, TXT_WED, TXT_THU, TXT_FRI, TXT_SAT};
+
 /* ================= 工具函数 ================= */
-/* 末尾补空格到 width 个字符: 输出定宽, 新内容自然覆盖旧内容 */
-static void pad_to(char *s, int width)
+/* 把颜色往白色方向提亮: pct = 100 原色, 0 = 纯白 */
+#define DEGC_LIGHT_PCT  60      /* ℃ 符号的提亮百分比 (越小越浅) */
+
+static uint32_t lighten(uint32_t c, int pct)
 {
-    int n = (int)strlen(s);
+    uint32_t r = (c >> 16) & 0xFFu;
+    uint32_t g = (c >> 8)  & 0xFFu;
+    uint32_t b =  c        & 0xFFu;
 
-    while (n < width) {
-        s[n] = ' ';
-        n++;
-    }
-    s[n] = '\0';
+    r = 255u - (255u - r) * (uint32_t)pct / 100u;
+    g = 255u - (255u - g) * (uint32_t)pct / 100u;
+    b = 255u - (255u - b) * (uint32_t)pct / 100u;
+
+    return (r << 16) | (g << 8) | b;
 }
+/* 末尾补空格到 width 个字符: 输出定宽, 新内容自然覆盖旧内容 */
+/* ???? s ????? width ???, ???????
+ * ?????? => ??????????, ??? FillRect (???)?
+ * ??: s ?????? >= width + 1?
+ */
+static void center_to(char *s, int width)
+{
+    int len = (int)strlen(s);
+    int lead;
+    int i;
 
+    if (len >= width) {
+        return;
+    }
+    lead = (width - len) / 2;
+
+    for (i = len - 1; i >= 0; i--) {   /* ?????, ?????? */
+        s[lead + i] = s[i];
+    }
+    for (i = 0; i < lead; i++) {
+        s[i] = ' ';
+    }
+    for (i = lead + len; i < width; i++) {
+        s[i] = ' ';
+    }
+    s[width] = '\0';
+}
 /* 按码查表, 查不到就返回"未知" */
 static const weather_info_t *info_find(int code)
 {
@@ -134,6 +172,23 @@ static int cn_len(const uint16_t *codes)
 }
 
 /* ================= 静态界面 ================= */
+/* ---- ???: ??(16x32) + ?????(16x24), ?????? ----
+ * x0,width : ????
+ * ?? 6 ???(??)????, ??????: ??????, ?????
+ */
+static void draw_temp(int x0, int y, int width, const char *num, uint32_t color)
+{
+    int len   = (int)strlen(num);
+    int total = len * 16 + DEGC_W;
+    int x     = x0 + (width - total) / 2;
+
+    DrawString((uint16_t)x0, (uint16_t)y, "      ", color, C_CARD);
+
+    DrawString((uint16_t)x, (uint16_t)y, num, color, C_CARD);
+    DrawBitmap((uint16_t)(x + len * 16), (uint16_t)(y + (32 - DEGC_H) / 2),
+               degc_bits, DEGC_W, DEGC_H, lighten(color, DEGC_LIGHT_PCT), C_CARD);
+}
+
 void ui_init(void)
 {
     /* 阶段 A: 背景 + 三张卡片 */
@@ -148,7 +203,7 @@ void ui_init(void)
     DrawTextCN24(48, 12, TXT_SUZHOU, C_TEXT, C_CARD);
     DrawTextBig(10, 42, "18:11:35", C_BLUE, C_CARD);
     DrawTextMid(12, 104, "2026.10.21", C_TEXT, C_CARD);
-    DrawTextCN24(155, 104, TXT_WED, C_TEXT, C_CARD);
+     DrawTextCN24(155, 104, TXT_WEEK[3], C_TEXT, C_CARD);
 
     /* 阶段 C: 卡片② 室内区 (占位符, 数据来了覆盖) */
     DrawTextCN(TXT2_X, LBL_Y, TXT_INDOOR, C_TEXT, C_CARD);
@@ -157,7 +212,6 @@ void ui_init(void)
     DrawString(TXT2_X, 262, "----mb", C_BLUE, C_CARD);
 
     /* 阶段 D: 卡片③ 室外区 */
-    DrawTextCN(TXT3_X, LBL_Y, TXT_OUTDOOR, C_TEXT, C_CARD);
     DrawBitmapColor(ICON_X, ICON_Y, weather_icon_find(99), WICON_W, WICON_H);
     DrawString(TXT3_X, OTEMP_Y, "--.-C", C_CYAN, C_CARD);
 }
@@ -176,9 +230,8 @@ void ui_update_weather(int temp_x10, int code)
     /* ---- 温度: 6 字符定宽, 用主题色 ---- */
     neg = (temp_x10 < 0);
     a   = neg ? -temp_x10 : temp_x10;
-    snprintf(buf, sizeof(buf), "%s%d.%dC", neg ? "-" : "", a / 10, a % 10);
-    pad_to(buf, 6);
-    DrawString(TXT3_X, OTEMP_Y, buf, w->color, C_CARD);
+    snprintf(buf, sizeof(buf), "%s%d.%d", neg ? "-" : "", a / 10, a % 10);
+    draw_temp(TXT3_X, OTEMP_Y, TXT3_W, buf, w->color);
 
     /* ---- 图标 + 中文: 只在天气变化时重画 (面积大, 避免闪烁) ---- */
     if (code != last_code) {
@@ -214,17 +267,50 @@ void ui_update_indoor(float temp, float humi, uint32_t press_x100)
     t10 = (int)(temp * 10.0f + (temp >= 0.0f ? 0.5f : -0.5f));
     neg = (t10 < 0);
     a   = neg ? -t10 : t10;
-    snprintf(buf, sizeof(buf), "%s%d.%dC", neg ? "-" : "", a / 10, a % 10);
-    pad_to(buf, 6);
-    DrawString(TXT2_X, 186, buf, C_BLUE, C_CARD);
+    snprintf(buf, sizeof(buf), "%s%d.%d", neg ? "-" : "", a / 10, a % 10);
+    draw_temp(TXT2_X, 186, TXT3_W, buf, C_BLUE);
 
     /* 湿度 */
     snprintf(buf, sizeof(buf), "%d%%RH", (int)(humi + 0.5f));
-    pad_to(buf, 6);
+    center_to(buf, 6);
     DrawString(TXT2_X, 224, buf, C_BLUE, C_CARD);
 
     /* 气压 */
     snprintf(buf, sizeof(buf), "%lumb", (unsigned long)(press_x100 / 100));
-    pad_to(buf, 6);
+    center_to(buf, 6);
     DrawString(TXT2_X, 262, buf, C_BLUE, C_CARD);
+}
+
+ void ui_update_time(int hour, int min, int sec){
+    static char last[9] = "        ";      /* 8 个空格 */
+        char buf[9];
+       snprintf(buf, sizeof(buf), "%02d:%02d:%02d",hour, min, sec); 
+        for (int i = 0; i < 8; i++) {
+              if (buf[i] != last[i]) {           /* 只处理变了的位 */
+                  DrawCharBig(10 + i * 28, 42, buf[i], C_BLUE, C_CARD);
+                  last[i] = buf[i];              /* ← 别忘了更新记忆 */
+              }
+          }
+ }
+
+  void ui_update_date(int year, int mon, int day, int wday){
+  static char last_date[16] = "";       /* 上次画过的日期字符串 (static: 程序全程保留) */
+  static int  last_wday = -1;           /* 上次画过的星期; -1 = 还没画过的哨兵值 */
+  char buf[16];
+
+  snprintf(buf, sizeof(buf), "%04d.%02d.%02d", year, mon, day);
+
+  /* 日期变了才重画 (strcmp 比内容, ==0 表示相同) */
+  if (strcmp(buf, last_date) != 0) {
+      DrawTextMid(12, 104, buf, C_TEXT, C_CARD);
+      strcpy(last_date, buf);           /* 画完再更新记忆 */
+  }
+
+  /* 星期变了才重画 */
+  if (wday != last_wday) {
+      if (wday >= 0 && wday < 7) {      /* 先判越界, 再当下标 */
+          DrawTextCN24(155, 104, TXT_WEEK[wday], C_TEXT, C_CARD);
+      }
+      last_wday = wday;
+  }
 }

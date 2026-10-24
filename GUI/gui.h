@@ -23,4 +23,5 @@ void DrawBitmap(uint16_t x, uint16_t y, const uint8_t *data,
  void DrawTextMid(uint16_t x, uint16_t y, const char *s, uint32_t fg, uint32_t bg);
  void DrawTextCN24(uint16_t x, uint16_t y, const uint16_t *codes, uint32_t fg, uint32_t bg);
 void DrawBitmapColor(uint16_t x, uint16_t y, const uint16_t *data, uint16_t w, uint16_t h);
+ void DrawCharBig(uint16_t x, uint16_t y, char ch, uint32_t fg, uint32_t bg);
 #endif

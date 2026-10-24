@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-#define WICON_W  48
-#define WICON_H  48
+#define WICON_W  64
+#define WICON_H  64
 
 const uint16_t *weather_icon_find(int code);
 

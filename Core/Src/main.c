@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdint.h>
 #include <stdio.h>
+#include "stm32f4xx_hal.h"
 #include "uart.h"
 #include "aht20.h"
 #include "bmp280.h"
@@ -34,6 +35,7 @@
 #include <string.h>
 #include "icon_wifi.h"
 #include "ui.h"
+#include "clock.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -65,6 +67,7 @@ static int g_weather_code = 99;   /* weather code, 99 = unknown */
 static bool g_weather_ok;
 static uint32_t last_sensor_ms = 0;
 static uint32_t last_weather_ms = 0;
+static uint32_t last_time_ms = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -137,6 +140,7 @@ int main(void)
   /* ---- ESP32 串口链路握手验证 ---- */
   ESP32_Init();
   ESP32_SendCommand("GET_WEATHER"); /* 试探命令，可改成 ESP32 固件支持的指令 */
+  ESP32_SendCommand("GET_TIME");
   printf("[ESP32] TX: GET_WEATHER\r\n");
   /* USER CODE END 2 */
 
@@ -156,7 +160,7 @@ int main(void)
       if (strncmp(line, "$W", 2) == 0)
       {
         int t = 0;
-        int code = 99;
+        int code = 0;
         int n = sscanf(line, "$W,%d,%d", &t, &code);
         if (n == 2)
         {
@@ -177,7 +181,49 @@ int main(void)
           printf("[WEATHER] 打印失败 sscanf返回%d\r\n", n);
         }
       }
+      else if(strncmp(line, "$T", 2) == 0){
+        int year = 0;
+        int month = 0;
+        int day = 0;
+        int hour = 0;
+        int min = 0;
+        int sec = 0;
+        int week = 0;
+        int n = sscanf(line, "$T,%d,%d,%d,%d,%d,%d,%d", &year, &month,&day,&hour,&min,&sec,&week);
+        if(n == 7){
+          if (year >= 2000 && year <= 2100 && month <= 12 && month >=1 && day <=31 && day >=1 && hour <= 23 && hour >= 0 && min <= 59 && min>= 0 && sec <= 59 && sec >= 0 && week <=6 && week >= 0){
+ printf("[TIME] sync %04d-%02d-%02d %02d:%02d:%02d w=%d\r\n",
+          year, month, day, hour, min, sec, week);
+          clock_time_t time ={
+            .year = year,
+            .mon = month,
+            .day = day,
+            .hour = hour,
+            .min = min,
+            .sec = sec,
+            .wday = week
+          };
+          Clock_Set( &time);
+          ui_update_time(hour, min, sec);
+          ui_update_date(year, month, day, week);
+        }
+          else
+          {
+            printf("[TIME] 数据超出范围: year=04%d month=02%d day=02%d hour=02%d min=02%d sec=02%d week=%d\r\n", year, month, day, hour, min, sec, week);
+          }
+        }
+        else
+        {
+          printf("[TIME] 打印失败 sscanf返回%d\r\n", n);
+        }
+      }
     }
+    clock_time_t time;
+   if (Clock_Tick(&time)) {
+       ui_update_time(time.hour, time.min, time.sec);
+       ui_update_date(time.year, time.mon, time.day, time.wday);
+   }
+
     if ((HAL_GetTick() - last_sensor_ms )>= 2000)
     {
       last_sensor_ms += 2000;
@@ -189,9 +235,23 @@ int main(void)
     }
      if (HAL_GetTick() - last_weather_ms >= 30000)
    {
-       last_weather_ms += 30000;
+       last_weather_ms = HAL_GetTick();   /* 命令用 = : 防止卡顿后连发 */
        ESP32_SendCommand("GET_WEATHER");
    }
+    /* ---- 对时: 未校准每 30 秒重试, 已校准每 1 小时再对一次 ---- */
+    if (!Clock_IsSet()) {
+        /* 还没拿到过时间: 尽快重试 (SNTP 可能还没同步好, ESP32 会回 $E,3) */
+        if (HAL_GetTick() - last_time_ms >= 30000u) {
+            last_time_ms = HAL_GetTick();
+            ESP32_SendCommand("GET_TIME");
+        }
+    } else {
+        /* 已经校准: 每小时再对一次, 抵消晶振漂移 */
+        if (HAL_GetTick() - last_time_ms >= 3600000u) {
+            last_time_ms = HAL_GetTick();
+            ESP32_SendCommand("GET_TIME");
+        }
+    }
     HAL_Delay(1);
   }
 }

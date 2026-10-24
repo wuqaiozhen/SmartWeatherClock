@@ -54,6 +54,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/Hardware/aht20.c
     ${CMAKE_SOURCE_DIR}/Hardware/bmp280.c
      ${CMAKE_SOURCE_DIR}/Hardware/st7789.c
+     ${CMAKE_SOURCE_DIR}/Hardware/clock.c
       ${CMAKE_SOURCE_DIR}/GUI/font.c
      ${CMAKE_SOURCE_DIR}/GUI/gui.c
      ${CMAKE_SOURCE_DIR}/GUI/font_big.c 
@@ -65,6 +66,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
      ${CMAKE_SOURCE_DIR}/GUI/ui.c
      ${CMAKE_SOURCE_DIR}/GUI/icon_wifi.c
      ${CMAKE_SOURCE_DIR}/GUI/icon_weather.c
+     ${CMAKE_SOURCE_DIR}/GUI/icon_degc.c
      
       
 )

@@ -87,7 +87,7 @@ void DrawBitmap(uint16_t x, uint16_t y, const uint8_t *data,
   uint16_t c_fg = ST7789_RGB888to565(fg);
   uint16_t c_bg = ST7789_RGB888to565(bg);
 
-  static uint8_t buf[48 * 48 * 2];
+  static uint8_t buf[64 * 64 * 2];
   int idx = 0;
   for (int row = 0; row < h; row++)
   {
@@ -111,17 +111,17 @@ void DrawBitmap(uint16_t x, uint16_t y, const uint8_t *data,
 
  void DrawTextBig(uint16_t x, uint16_t y, const char *s, uint32_t fg, uint32_t bg){
   while(*s != 0){
-     const uint8_t *  glyph = big_font_find(*s);
-     if( glyph == NULL){
-       x += 28;      
-       s++;
-       continue;
-     }
-     DrawBitmap(x, y, glyph, 24, 48, fg, bg);
-     x += 24+4;
-     s++;
+      DrawCharBig(x, y, *s, fg, bg);  
+           x += 24 + 4;                      
+           s++;
   }
  }
+
+  void DrawCharBig(uint16_t x, uint16_t y, char ch, uint32_t fg, uint32_t bg){
+    const uint8_t *glyph = big_font_find(ch);
+        if (glyph == NULL) return;      
+         DrawBitmap(x, y, glyph, 24, 48, fg, bg);
+  }
 
  void DrawTextSmall(uint16_t x, uint16_t y, const char *s, uint32_t fg, uint32_t bg){
   while(*s != 0){
@@ -196,9 +196,9 @@ void DrawBitmap(uint16_t x, uint16_t y, const uint8_t *data,
  /* ????: ??? 2 ?? RGB565 (?????, ??? SPI) */
  void DrawBitmapColor(uint16_t x, uint16_t y, const uint16_t *data, uint16_t w, uint16_t h){
   if(data == 0 || w == 0 || h == 0) return;
-  if((uint32_t)w * h > 48u * 48u) return;          /* ??????? */
+  if((uint32_t)w * h > 64u * 64u) return;          /* ??????? */
 
-  static uint8_t buf[48 * 48 * 2];
+  static uint8_t buf[64 * 64 * 2];
   uint32_t n = (uint32_t)w * h;
   for(uint32_t i = 0; i < n; i++){
      buf[i * 2]     = (uint8_t)(data[i] >> 8);
