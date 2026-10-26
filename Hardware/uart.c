@@ -10,7 +10,3 @@ int __io_putchar(int ch)
     HAL_UART_Transmit(&huart1, (uint8_t *)&ch,1, HAL_MAX_DELAY);
     return ch;
 }
-void UART_SendString(const char *s)
-{
-    HAL_UART_Transmit(&huart1, (uint8_t *)s, strlen(s), HAL_MAX_DELAY);
-}

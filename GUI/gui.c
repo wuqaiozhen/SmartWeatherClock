@@ -3,7 +3,6 @@
 #include "st7789.h"
 #include <stdint.h>
 #include "font_big.h"
-#include "font_small.h"
 #include "font_cn.h"
 
 #define LCD_W 240
@@ -109,13 +108,7 @@ void DrawBitmap(uint16_t x, uint16_t y, const uint8_t *data,
     ST7789_WriteDataBulk(buf, w * h * 2);
 }
 
- void DrawTextBig(uint16_t x, uint16_t y, const char *s, uint32_t fg, uint32_t bg){
-  while(*s != 0){
-      DrawCharBig(x, y, *s, fg, bg);  
-           x += 24 + 4;                      
-           s++;
-  }
- }
+ 
 
   void DrawCharBig(uint16_t x, uint16_t y, char ch, uint32_t fg, uint32_t bg){
     const uint8_t *glyph = big_font_find(ch);
@@ -123,19 +116,7 @@ void DrawBitmap(uint16_t x, uint16_t y, const uint8_t *data,
          DrawBitmap(x, y, glyph, 24, 48, fg, bg);
   }
 
- void DrawTextSmall(uint16_t x, uint16_t y, const char *s, uint32_t fg, uint32_t bg){
-  while(*s != 0){
-     const uint8_t *  glyph = small_font_find(*s);
-     if( glyph == NULL){
-       x += 8;      
-       s++;
-       continue;
-     }
-     DrawBitmap(x, y, glyph, 8, 16, fg, bg);
-     x += 8;
-     s++;
-  }
- }
+ 
 
  void DrawTextCN(uint16_t x, uint16_t y, const uint16_t*codes, uint32_t fg, uint32_t bg){
   while(*codes != 0){
@@ -150,21 +131,8 @@ void DrawBitmap(uint16_t x, uint16_t y, const uint8_t *data,
      codes++;
   }
  }
- /* 32x32 ???: ?????? */
- void DrawTextCN32(uint16_t x, uint16_t y, const uint16_t *codes, uint32_t fg, uint32_t bg){
-  while(*codes != 0){
-     const uint8_t *glyph = cn32_font_find(*codes);
-     if( glyph == NULL){
-       x += 32;
-       codes++;
-       continue;
-     }
-     DrawBitmap(x, y, glyph, 32, 32, fg, bg);
-     x += 32;
-     codes++;
-  }
- }
- /* 12x24 ASCII: ??????? */
+ 
+ /* 12x24 ASCII: 中等字号 (日期用) */
  void DrawTextMid(uint16_t x, uint16_t y, const char *s, uint32_t fg, uint32_t bg){
   while(*s != 0){
      const uint8_t *glyph = font_mid_find((uint8_t)*s);
@@ -179,7 +147,7 @@ void DrawBitmap(uint16_t x, uint16_t y, const uint8_t *data,
   }
  }
 
- /* 24x24 ??? */
+ /* 24x24 中文字 (标题 / 天气词) */
  void DrawTextCN24(uint16_t x, uint16_t y, const uint16_t *codes, uint32_t fg, uint32_t bg){
   while(*codes != 0){
      const uint8_t *glyph = font_cn24_find(*codes);

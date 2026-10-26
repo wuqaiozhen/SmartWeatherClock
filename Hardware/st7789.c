@@ -31,12 +31,6 @@ void ST7789_WriteData(uint8_t data) {
   ST7789_DC(1);
   ST7789_WriteByte(data);
 }
-void ST7789_Reset(void) {
-  HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_RESET);
-  HAL_Delay(10);
-  HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_SET);
-  HAL_Delay(120);
-}
 
 void ST7789_Init(void) {
   /* 厂家复位时序 */

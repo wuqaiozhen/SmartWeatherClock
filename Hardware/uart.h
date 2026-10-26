@@ -3,5 +3,4 @@
 
 #include "main.h"
 
-void UART_SendString(const char *S);
 #endif
