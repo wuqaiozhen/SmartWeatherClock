@@ -62,9 +62,6 @@ UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-static int g_temp_x10;
-static int g_weather_code = 99;   /* weather code, 99 = unknown */
-static bool g_weather_ok;
 static uint32_t last_sensor_ms = 0;
 static uint32_t last_weather_ms = 0;
 static uint32_t last_time_ms = 0;
@@ -137,11 +134,12 @@ int main(void)
 
   ST7789_Init();
   ui_init();
-  /* ---- ESP32 串口链路握手验证 ---- */
+  /* ---- ESP32 链路启动: 请求天气 + 对时 ---- */
   ESP32_Init();
-  ESP32_SendCommand("GET_WEATHER"); /* 试探命令，可改成 ESP32 固件支持的指令 */
-  ESP32_SendCommand("GET_TIME");
   printf("[ESP32] TX: GET_WEATHER\r\n");
+  ESP32_SendCommand("GET_WEATHER");
+  printf("[ESP32] TX: GET_TIME\r\n");
+  ESP32_SendCommand("GET_TIME");
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -156,7 +154,7 @@ int main(void)
     char line[128];
     if (ESP32_GetLine(line, sizeof(line)))
     {
- printf("[RX] %s\r\n", line);
+      printf("[RX] %s\r\n", line);
       if (strncmp(line, "$W", 2) == 0)
       {
         int t = 0;
@@ -166,10 +164,7 @@ int main(void)
         {
           if (t <= 1250 && t >= -550 && code >= 0 && code <= 99)
           {
-            g_temp_x10 = t;
-            g_weather_code = code;
-            g_weather_ok = 1;
-            ui_update_weather(g_temp_x10, g_weather_code);
+            ui_update_weather(t, code);   /* 天气码: 见 ui.c 的 k_weather[] */
           }
           else
           {
@@ -178,10 +173,11 @@ int main(void)
         }
         else
         {
-          printf("[WEATHER] 打印失败 sscanf返回%d\r\n", n);
+          printf("[WEATHER] 解析失败 sscanf返回%d\r\n", n);
         }
       }
-      else if(strncmp(line, "$T", 2) == 0){
+      else if (strncmp(line, "$T", 2) == 0)
+      {
         int year = 0;
         int month = 0;
         int day = 0;
@@ -189,42 +185,44 @@ int main(void)
         int min = 0;
         int sec = 0;
         int week = 0;
-        int n = sscanf(line, "$T,%d,%d,%d,%d,%d,%d,%d", &year, &month,&day,&hour,&min,&sec,&week);
-        if(n == 7){
-          if (year >= 2000 && year <= 2100 && month <= 12 && month >=1 && day <=31 && day >=1 && hour <= 23 && hour >= 0 && min <= 59 && min>= 0 && sec <= 59 && sec >= 0 && week <=6 && week >= 0){
- printf("[TIME] sync %04d-%02d-%02d %02d:%02d:%02d w=%d\r\n",
-          year, month, day, hour, min, sec, week);
-          clock_time_t time ={
-            .year = year,
-            .mon = month,
-            .day = day,
-            .hour = hour,
-            .min = min,
-            .sec = sec,
-            .wday = week
-          };
-          Clock_Set( &time);
-          ui_update_time(hour, min, sec);
-          ui_update_date(year, month, day, week);
-        }
+        int n = sscanf(line, "$T,%d,%d,%d,%d,%d,%d,%d", &year, &month, &day, &hour, &min, &sec, &week);
+        if (n == 7)
+        {
+          if (year >= 2000 && year <= 2100 && month <= 12 && month >= 1 && day <= 31 && day >= 1 && hour <= 23 && hour >= 0 && min <= 59 && min >= 0 && sec <= 59 && sec >= 0 && week <= 6 && week >= 0)
+          {
+            printf("[TIME] sync %04d-%02d-%02d %02d:%02d:%02d w=%d\r\n",
+                   year, month, day, hour, min, sec, week);
+            clock_time_t time = {
+                .year = year,
+                .mon = month,
+                .day = day,
+                .hour = hour,
+                .min = min,
+                .sec = sec,
+                .wday = week};
+            Clock_Set(&time);
+            ui_update_time(hour, min, sec);
+            ui_update_date(year, month, day, week);
+          }
           else
           {
-            printf("[TIME] 数据超出范围: year=04%d month=02%d day=02%d hour=02%d min=02%d sec=02%d week=%d\r\n", year, month, day, hour, min, sec, week);
+            printf("[TIME] 数据超出范围: year=%04d month=%02d day=%02d hour=%02d min=%02d sec=%02d week=%d\r\n", year, month, day, hour, min, sec, week);
           }
         }
         else
         {
-          printf("[TIME] 打印失败 sscanf返回%d\r\n", n);
+          printf("[TIME] 解析失败 sscanf返回%d\r\n", n);
         }
       }
     }
     clock_time_t time;
-   if (Clock_Tick(&time)) {
-       ui_update_time(time.hour, time.min, time.sec);
-       ui_update_date(time.year, time.mon, time.day, time.wday);
-   }
+    if (Clock_Tick(&time))
+    {
+      ui_update_time(time.hour, time.min, time.sec);
+      ui_update_date(time.year, time.mon, time.day, time.wday);
+    }
 
-    if ((HAL_GetTick() - last_sensor_ms )>= 2000)
+    if ((HAL_GetTick() - last_sensor_ms) >= 2000)
     {
       last_sensor_ms += 2000;
       float st, sh;
@@ -233,24 +231,29 @@ int main(void)
         ui_update_indoor(st, sh, press);
       }
     }
-     if (HAL_GetTick() - last_weather_ms >= 30000)
-   {
-       last_weather_ms = HAL_GetTick();   /* 命令用 = : 防止卡顿后连发 */
-       ESP32_SendCommand("GET_WEATHER");
-   }
+    if (HAL_GetTick() - last_weather_ms >= 30000)
+    {
+      last_weather_ms = HAL_GetTick(); /* 命令用 = : 防止卡顿后连发 */
+      ESP32_SendCommand("GET_WEATHER");
+    }
     /* ---- 对时: 未校准每 30 秒重试, 已校准每 1 小时再对一次 ---- */
-    if (!Clock_IsSet()) {
-        /* 还没拿到过时间: 尽快重试 (SNTP 可能还没同步好, ESP32 会回 $E,3) */
-        if (HAL_GetTick() - last_time_ms >= 30000u) {
-            last_time_ms = HAL_GetTick();
-            ESP32_SendCommand("GET_TIME");
-        }
-    } else {
-        /* 已经校准: 每小时再对一次, 抵消晶振漂移 */
-        if (HAL_GetTick() - last_time_ms >= 3600000u) {
-            last_time_ms = HAL_GetTick();
-            ESP32_SendCommand("GET_TIME");
-        }
+    if (!Clock_IsSet())
+    {
+      /* 还没拿到过时间: 尽快重试 (SNTP 可能还没同步好, ESP32 会回 $E,3) */
+      if (HAL_GetTick() - last_time_ms >= 30000u)
+      {
+        last_time_ms = HAL_GetTick();
+        ESP32_SendCommand("GET_TIME");
+      }
+    }
+    else
+    {
+      /* 已经校准: 每小时再对一次, 抵消晶振漂移 */
+      if (HAL_GetTick() - last_time_ms >= 3600000u)
+      {
+        last_time_ms = HAL_GetTick();
+        ESP32_SendCommand("GET_TIME");
+      }
     }
     HAL_Delay(1);
   }

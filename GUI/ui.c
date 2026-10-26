@@ -120,11 +120,9 @@ static uint32_t lighten(uint32_t c, int pct)
 
     return (r << 16) | (g << 8) | b;
 }
-/* 末尾补空格到 width 个字符: 输出定宽, 新内容自然覆盖旧内容 */
-/* ???? s ????? width ???, ???????
- * ?????? => ??????????, ??? FillRect (???)?
- * ??: s ?????? >= width + 1?
- */
+/* 用空格把 s 左右补齐到 width 个字符, 内容水平居中。
+ * 输出宽度固定 => 新内容自然覆盖旧内容, 不需要 FillRect (不会闪)。
+ * 注意: s 的缓冲区必须 >= width + 1。 */
 static void center_to(char *s, int width)
 {
     int len = (int)strlen(s);
@@ -136,7 +134,7 @@ static void center_to(char *s, int width)
     }
     lead = (width - len) / 2;
 
-    for (i = len - 1; i >= 0; i--) {   /* ?????, ?????? */
+    for (i = len - 1; i >= 0; i--) {   /* 从后往前搬, 避免自我覆盖 */
         s[lead + i] = s[i];
     }
     for (i = 0; i < lead; i++) {
@@ -172,9 +170,9 @@ static int cn_len(const uint16_t *codes)
 }
 
 /* ================= 静态界面 ================= */
-/* ---- ???: ??(16x32) + ?????(16x24), ?????? ----
- * x0,width : ????
- * ?? 6 ???(??)????, ??????: ??????, ?????
+/* ---- 画温度: 数字(16x32) + 摄氏度符号(16x24), 整段水平居中 ----
+ * x0,width : 可用区间
+ * 先用 6 个空格(底色)铺满整行, 保证宽度固定: 不残留旧数字, 也不会闪
  */
 static void draw_temp(int x0, int y, int width, const char *num, uint32_t color)
 {
@@ -201,19 +199,19 @@ void ui_init(void)
     /* 阶段 B: 卡片① 时间区 */
     DrawBitmap(14, 12, wifi_icon, 24, 24, C_TEXT, C_CARD);
     DrawTextCN24(48, 12, TXT_SUZHOU, C_TEXT, C_CARD);
-    DrawTextBig(10, 42, "18:11:35", C_BLUE, C_CARD);
-    DrawTextMid(12, 104, "2026.10.21", C_TEXT, C_CARD);
-     DrawTextCN24(155, 104, TXT_WEEK[3], C_TEXT, C_CARD);
+    /* 时间和日期先留空 / 占位: 收到 $T 后才会显示真实值
+     * 不要画假数据(比如 18:11:35), 以免开机那 1 秒误导人 */
+    DrawTextMid(12, 104, "----.--.--", C_TEXT, C_CARD);
 
     /* 阶段 C: 卡片② 室内区 (占位符, 数据来了覆盖) */
     DrawTextCN(TXT2_X, LBL_Y, TXT_INDOOR, C_TEXT, C_CARD);
-    DrawString(TXT2_X, 186, "--.-C",  C_BLUE, C_CARD);
+    draw_temp(TXT2_X, 186, TXT3_W, "--.-", C_BLUE);      /* 占位: --.-℃ */
     DrawString(TXT2_X, 224, "--%RH",  C_BLUE, C_CARD);
     DrawString(TXT2_X, 262, "----mb", C_BLUE, C_CARD);
 
     /* 阶段 D: 卡片③ 室外区 */
     DrawBitmapColor(ICON_X, ICON_Y, weather_icon_find(99), WICON_W, WICON_H);
-    DrawString(TXT3_X, OTEMP_Y, "--.-C", C_CYAN, C_CARD);
+    draw_temp(TXT3_X, OTEMP_Y, TXT3_W, "--.-", C_CYAN);   /* 占位: --.-℃ */
 }
 
 /* ================= 更新室外天气 ================= */
