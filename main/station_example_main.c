@@ -1,12 +1,14 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "ntp.h"
 #include "nvs_flash.h"
 #include "uart_proto.h"
 #include "weather.h"
 #include "wifi.h"
 #include <stdio.h>
 #include <string.h>
+
 
 static const char *TAG = "main";
 
@@ -24,6 +26,18 @@ void app_main(void) {
   ESP_LOGI(TAG, "boot");
   wifi_init_sta();
   char line[128];
+/*测试*/
+  struct tm tm_now; 
+  if(ntp_get_local(&tm_now, 15000) == 1){
+    char buf[48];
+          snprintf(buf, sizeof(buf), "$T,%d,%d,%d,%d,%d,%d,%d",
+                   tm_now.tm_year + 1900, tm_now.tm_mon + 1, tm_now.tm_mday, tm_now.tm_hour,
+                   tm_now.tm_min, tm_now.tm_sec, tm_now.tm_wday); 
+          ESP_LOGI(TAG, "self-test: %s", buf);    
+    } else {
+          ESP_LOGE(TAG, "self-test: time failed");
+      }
+
   while (1) {
     if (uart_read_line(line, sizeof(line))) {
       if (strcmp(line, "PING") == 0) {
@@ -41,8 +55,18 @@ void app_main(void) {
           ESP_LOGE(TAG, "weather failed");
         }
       } else if (strcmp(line, "GET_TIME") == 0) {
-        uart_send_line("$BUSY");
-        ESP_LOGI(TAG, "TODO: time");
+        struct tm t;
+        char buf[48];
+        if (ntp_get_local(&t, 15000)) {
+          snprintf(buf, sizeof(buf), "$T,%d,%d,%d,%d,%d,%d,%d",
+                   t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour,
+                   t.tm_min, t.tm_sec, t.tm_wday);
+          uart_send_line(buf);
+          ESP_LOGI(TAG, "TX: %s", buf);
+        } else {
+          uart_send_line("$E,3");
+          ESP_LOGI(TAG, "time not ready");
+        }
       } else {
         uart_send_line("$E,9");
         ESP_LOGI(TAG, "unknow cmd:[%s]", line);
