@@ -1,0 +1,20 @@
+# ===== ESP-IDF 编译产物（每次编译都会重新生成，不要进版本库）=====
+build/
+managed_components/
+dependencies.lock
+
+# ===== 日志 =====
+*.log
+build.log
+flash_s3.log
+
+# ===== 临时 / 备份 =====
+sdkconfig.old
+*.swp
+*.tmp
+
+# ===== 说明 =====
+# 故意不忽略下面这些（它们应该纳入版本控制）：
+#   sdkconfig             项目配置（menuconfig 的结果）
+#   main/、CMakeLists.txt 源码
+#   .vscode/              编辑器配置
