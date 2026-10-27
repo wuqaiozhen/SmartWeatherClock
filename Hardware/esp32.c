@@ -18,14 +18,19 @@ static volatile uint16_t s_rx_tail = 0;
 #define ESP32_LINE_MAX 256
 static char     s_line[ESP32_LINE_MAX];
 static uint16_t s_line_len = 0;
-static uint8_t  s_in_esc   = 0;   /* 是否正处于 ANSI 转义序列中 */
+
+/* ANSI 转义序列解析状态
+ *   0 = 普通字符
+ *   1 = 刚收到 ESC (0x1B)
+ *   2 = 已收到 "ESC [" (CSI), 正在跳过参数直到终止字节 */
+static uint8_t  s_esc_state = 0;
 
 void ESP32_Init(void)
 {
     s_rx_head = 0;
     s_rx_tail = 0;
     s_line_len = 0;
-    s_in_esc = 0;
+    s_esc_state = 0;
     HAL_UART_Receive_IT(&huart2, &s_rx_byte, 1);
 }
 
@@ -69,24 +74,41 @@ int ESP32_GetLine(char *out, uint16_t max_len)
         uint8_t c = s_rx_buf[s_rx_tail];
         s_rx_tail = (uint16_t)((s_rx_tail + 1) % ESP32_RX_BUF_SIZE);
 
-        /* 过滤 ANSI 转义序列：ESC ... 到 0x40~0x7E 结束 */
-        if (s_in_esc)
+        /* ---------- 过滤 ANSI 转义序列 ----------
+         * 完整格式: ESC [ 参数 中间字节 终止字节
+         *   ESC(0x1B)  '['(0x5B)  0x30~0x3F  0x20~0x2F  0x40~0x7E
+         * 关键: '[' 本身也是 0x40~0x7E, 不能把它当成终止符,
+         *       否则后面的 "32m" 会被当成正常数据拼进行里。
+         */
+        if (s_esc_state == 1)                 /* 刚收到 ESC */
         {
-            if (c >= 0x40 && c <= 0x7E) s_in_esc = 0;
+            s_esc_state = (c == '[') ? 2 : 0; /* ESC[ = CSI; 否则是双字符转义, 直接丢弃 */
             continue;
         }
-        if (c == 0x1B) { s_in_esc = 1; continue; }
+        if (s_esc_state == 2)                 /* CSI 参数中, 一直跳到终止字节 */
+        {
+            if (c >= 0x40 && c <= 0x7E) s_esc_state = 0;
+            continue;
+        }
+        if (c == 0x1B) { s_esc_state = 1; continue; }
 
         if (c == '\n')
         {
             uint16_t n = s_line_len;
+            uint16_t start = 0;
+            uint16_t i;
+
             if (n > 0 && s_line[n - 1] == '\r') n--;
             s_line[n] = '\0';
             s_line_len = 0;
 
+            /* 跳过行首空白(空格/Tab)——ESP32 打印时可能带缩进或颜色码残留,
+             * 不跳过会使 strncmp(line, "$W", 2) 永远不成立, 整行数据被丢掉。 */
+            while (start < n && (s_line[start] == ' ' || s_line[start] == '\t')) start++;
+
             if (max_len == 0) return 1;
-            uint16_t i = 0;
-            for (; i < n && i < max_len - 1; i++) out[i] = s_line[i];
+            i = 0;
+            for (; start < n && i < max_len - 1; i++, start++) out[i] = s_line[start];
             out[i] = '\0';
             return 1;
         }
