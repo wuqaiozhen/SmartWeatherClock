@@ -2,6 +2,10 @@
 #include "driver/uart.h"
 #include "esp_log.h"
 #include <string.h>
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/projdefs.h"
+#include "freertos/task.h"
 
 #define UART_PORT UART_NUM_0
 #define UART_TX_PIN 43
@@ -82,7 +86,7 @@ int uart_read_line(char *out, int max_len)
         }
 
         /* ---- 2) 本批用完了, 再向驱动要一批 ---- */
-        n = uart_read_bytes(UART_PORT, s_rx, sizeof(s_rx), 0);
+        n = uart_read_bytes(UART_PORT, s_rx, sizeof(s_rx), pdMS_TO_TICKS(20));
         if (n <= 0) {
             return 0;                       /* 没有新数据, 让调用者先去干别的 */
         }
@@ -93,6 +97,15 @@ int uart_read_line(char *out, int max_len)
 
 void uart_send_line(const char *s)
 {
-  uart_write_bytes(UART_PORT, s, strlen(s));
-  uart_write_bytes(UART_PORT,"\r\n", 2);
+  char buf[LINE_BUF_SIZE + 3];
+
+  int n = snprintf(buf, sizeof(buf)," %s\r\n", s);
+  if(n <= 0){
+    return ;
+  }
+  if(n > (int)sizeof(buf)-1){
+    n = (int)sizeof(buf)-1 ;
+  }
+
+  uart_write_bytes(UART_PORT, buf, n);
 }
