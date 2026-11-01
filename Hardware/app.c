@@ -3,11 +3,18 @@
 #include "cmsis_os.h"
 #include "cmsis_os2.h"
 #include "esp32.h"
+#include "stm32f4xx_hal.h"
 #include "ui.h"
 #include "ui_msg.h"
-#include <stdio.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <string.h>
+
+/* ---- 请求周期 (ms) ---- */
+#define WEATHER_PERIOD_MS 600000u /* 天气: 10 分钟 */
+#define TIME_RETRY_MS 3000u       /* 未校准: 3 秒重试 (正式版改 30000u) */
+#define TIME_PERIOD_MS 3600000u   /* 已校准: 1 小时 */
 
 static osMessageQueueId_t ui_q = NULL;
 
@@ -74,6 +81,12 @@ static void TaskUI(void *argument) {
              msg.u.date.mon, msg.u.date.day, msg.u.date.wday);
       break;
 
+    case UI_MSG_WEATHER:
+      ui_update_weather(msg.u.weather.temp_x10, msg.u.weather.code);
+      printf("[UI] weather x10=%d code=%d\r\n", msg.u.weather.temp_x10,
+             msg.u.weather.code);
+      break;
+
     default:
       break;
     }
@@ -82,7 +95,6 @@ static void TaskUI(void *argument) {
 
 static bool handle_time_line(const char *line) {
   int year, mon, day, hour, min, sec, wday;
-  clock_time_t t;
   ui_msg_t m;
 
   if (sscanf(line, "$T,%d,%d,%d,%d,%d,%d,%d", &year, &mon, &day, &hour, &min,
@@ -93,29 +105,25 @@ static bool handle_time_line(const char *line) {
   if (year >= 2000 && year <= 2100 && mon <= 12 && mon >= 1 && day <= 31 &&
       day >= 1 && hour <= 23 && hour >= 0 && min <= 59 && min >= 0 &&
       sec <= 59 && sec >= 0 && wday <= 6 && wday >= 0) {
-    printf("[TIME] sync %04d-%02d-%02d %02d:%02d:%02d w=%d\r\n", year, mon, day,
-           hour, min, sec, wday);
-    t.year = year;
-    t.mon  = mon;
-    t.day  = day;
-    t.hour = hour;
-    t.min  = min;
-    t.sec  = sec;
-    t.wday = wday;
+    clock_time_t t = {t.year = year, t.mon = mon, t.day = day,  t.hour = hour,
+                      t.min = min,   t.sec = sec, t.wday = wday};
     Clock_Set(&t);
 
-     m.type        = UI_MSG_TIME;
-       m.u.time.hour = t.hour;
-       m.u.time.min  = t.min;
-       m.u.time.sec  = t.sec;
-       osMessageQueuePut(ui_q, &m, 0, 0);
+    m.type = UI_MSG_TIME;
+    m.u.time.hour = t.hour;
+    m.u.time.min = t.min;
+    m.u.time.sec = t.sec;
+    osMessageQueuePut(ui_q, &m, 0, 0);
 
-       m.type        = UI_MSG_DATE;      /* 复用同一个 m, 只改 type 和对应分支 */
-       m.u.date.year = t.year;
-       m.u.date.mon  = t.mon;
-       m.u.date.day  = t.day;
-       m.u.date.wday = t.wday;
-       osMessageQueuePut(ui_q, &m, 0, 0);
+    m.type = UI_MSG_DATE; /* 复用同一个 m, 只改 type 和对应分支 */
+    m.u.date.year = t.year;
+    m.u.date.mon = t.mon;
+    m.u.date.day = t.day;
+    m.u.date.wday = t.wday;
+    osMessageQueuePut(ui_q, &m, 0, 0);
+
+    printf("[TIME] sync %04d-%02d-%02d %02d:%02d:%02d w=%d\r\n", year, mon, day,
+           hour, min, sec, wday);
     return true;
   } else {
     printf("[TIME] 数据超出范围: year=%04d month=%02d day=%02d hour=%02d "
@@ -125,23 +133,56 @@ static bool handle_time_line(const char *line) {
   }
 }
 
+static bool handle_weather_line(const char *line) {
+  int temp_x10, code;
+  ui_msg_t m;
+
+  if (sscanf(line, "$W,%d,%d", &temp_x10, &code) != 2) {
+    printf("[COMM] $W parse failed\r\n");
+    return false;
+  }
+  if (temp_x10 <= 1250 && temp_x10 >= -550 && code >= 0 && code <= 99) {
+    m.type = UI_MSG_WEATHER;
+    m.u.weather.temp_x10 = temp_x10;
+    m.u.weather.code = code;
+    osMessageQueuePut(ui_q, &m, 0, 0);
+    printf("[WEATHER]  temp_x10=%d code=%d\r\n", temp_x10, code);
+    return true;
+  } else {
+    printf("[WEATHER] 数据超出范围: t=%d code=%d\r\n", temp_x10, code);
+  }
+}
+
+static uint32_t s_last_weather_ms = 0;
+static uint32_t s_last_time_ms = 0;
 static void TaskComm(void *argument) {
   (void)argument;
   char line[128];
-  int n = 0;
-
+  uint32_t now;
+  uint32_t period;
   for (;;) {
+    /* ---- 1) 收数据 ---- */
     if (ESP32_GetLine(line, sizeof(line))) {
       printf("[RX] %s\r\n", line);
-
-      if (strncmp(line, "$T", 2) == 0) 
-      {
+      if (strncmp(line, "$T", 2) == 0) {
         handle_time_line(line);
+      } else if (strncmp(line, "$E", 2) == 0) {
+        printf("[COMM] ESP32 error reply: %s\r\n", line);
+      } else if (strncmp(line, "$W", 2) == 0) {
+        handle_weather_line(line);
       }
     }
-    n++;
-    if (n >= 150) {
-      n = 0;
+    /* ---- 2) 发请求 ---- */
+    now = HAL_GetTick();
+    if (now - s_last_weather_ms >= WEATHER_PERIOD_MS) {
+      s_last_weather_ms = now;
+      printf("[COMM] TX: GET_WEATHER\r\n");
+      ESP32_SendCommand("GET_WEATHER");
+    }
+
+    period = Clock_IsSet() ? TIME_PERIOD_MS : WEATHER_PERIOD_MS;
+    if (now - s_last_time_ms >= period) {
+      s_last_time_ms = now;
       printf("[COMM] TX: GET_TIME\r\n");
       ESP32_SendCommand("GET_TIME");
     }
