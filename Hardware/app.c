@@ -1,4 +1,6 @@
 #include "app.h"
+#include "aht20.h"
+#include "bmp280.h"
 #include "clock.h"
 #include "cmsis_os.h"
 #include "cmsis_os2.h"
@@ -10,6 +12,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
 
 /* ---- 请求周期 (ms) ---- */
 #define WEATHER_PERIOD_MS 600000u /* 天气: 10 分钟 */
@@ -34,6 +37,12 @@ static const osThreadAttr_t comm_attr = {
     .name = "comm",
     .stack_size = 512 * 4, /* 2KB: 要放 sscanf + printf */
     .priority = osPriorityNormal,
+};
+
+static const osThreadAttr_t sensor_attr = {
+    .name = "sensor",
+    .stack_size = 1024 * 4,
+    .priority = osPriorityBelowNormal,
 };
 
 static void TaskClock(void *argument) {
@@ -85,6 +94,17 @@ static void TaskUI(void *argument) {
       ui_update_weather(msg.u.weather.temp_x10, msg.u.weather.code);
       printf("[UI] weather x10=%d code=%d\r\n", msg.u.weather.temp_x10,
              msg.u.weather.code);
+      break;
+
+      case UI_MSG_INDOOR:
+       ui_update_indoor(msg.u.indoor.temp, msg.u.indoor.humi,
+                                msg.u.indoor.press_hpa);
+       printf("[UI] indoor %d.%d C %d%%RH %lu hPa\r\n",
+                      (int)(msg.u.indoor.temp * 10) / 10,   /* 用整数打印, 避免浮点 printf 吃栈 */
+                      (int)(msg.u.indoor.temp * 10) % 10,
+                      (int)(msg.u.indoor.humi + 0.5f),
+                      (unsigned long)(msg.u.indoor.press_hpa / 100));
+               break;
       break;
 
     default:
@@ -150,6 +170,7 @@ static bool handle_weather_line(const char *line) {
     return true;
   } else {
     printf("[WEATHER] 数据超出范围: t=%d code=%d\r\n", temp_x10, code);
+    return false;
   }
 }
 
@@ -180,7 +201,7 @@ static void TaskComm(void *argument) {
       ESP32_SendCommand("GET_WEATHER");
     }
 
-    period = Clock_IsSet() ? TIME_PERIOD_MS : WEATHER_PERIOD_MS;
+    period = Clock_IsSet() ? TIME_PERIOD_MS : TIME_RETRY_MS;
     if (now - s_last_time_ms >= period) {
       s_last_time_ms = now;
       printf("[COMM] TX: GET_TIME\r\n");
@@ -189,6 +210,39 @@ static void TaskComm(void *argument) {
     osDelay(20);
   }
 }
+
+static void TaskSensor(void *argument) {
+  (void)argument;
+  uint32_t wake = osKernelGetTickCount();
+  float t = 0.0f, h = 0.0f;
+  uint32_t adc_p, adc_t, press;
+
+  BMP280_ReadCalib();
+
+  for (;;) {
+    bool ok = false;
+
+    /* ---- 读AHT20 ---- */
+    if (AHT20_Read(&t, &h) == 0) {
+      ok = true;
+    } else {
+      printf("[SENSOR] AHT20 failed\r\n");
+    }
+    /* ---- 读BMP280 ---- */
+    BMP280_WriteReg(0xF4, 0x27);
+    osDelay(20);
+    BMP280_ReadData(&adc_p, &adc_t);
+    press = BMP280_CompensatePress((int32_t)adc_p);
+    /* ---- 数据有效才投消息---- */
+    if (ok) {ui_msg_t m; m.type =  UI_MSG_INDOOR;
+        m.u.indoor.temp = t; m.u.indoor.humi = h;
+        m.u.indoor.press_hpa = press;
+        osMessageQueuePut(ui_q, &m, 0, 0);
+    }
+    wake += 2000 * osKernelGetTickFreq() / 1000;
+     osDelayUntil(wake);
+  }
+} 
 
 void app_start(void) {
   ui_q = osMessageQueueNew(8, sizeof(ui_msg_t), NULL);
@@ -212,4 +266,10 @@ void app_start(void) {
   if (id == NULL) {
     printf("[COMM] create task failed\r\n");
   }
+
+   id = osThreadNew(TaskSensor, NULL, &sensor_attr);
+       if (id == NULL)
+       {
+           printf("[SENSOR] create task failed\r\n");
+       }
 }
