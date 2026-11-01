@@ -37,6 +37,7 @@
 #include "icon_wifi.h"
 #include "ui.h"
 #include "clock.h"
+ #include "app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -105,8 +106,7 @@ int main(void)
 
   /* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+  /* Reset of all peripherals, Initializes the Flash interf  HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -149,6 +149,7 @@ int main(void)
   ESP32_SendCommand("GET_WEATHER");
   printf("[ESP32] TX: GET_TIME\r\n");
   ESP32_SendCommand("GET_TIME");
+  app_start();
   /* USER CODE END 2 */
 
   /* Init scheduler */

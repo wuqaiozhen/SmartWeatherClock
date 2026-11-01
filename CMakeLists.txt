@@ -55,6 +55,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/Hardware/bmp280.c
      ${CMAKE_SOURCE_DIR}/Hardware/st7789.c
      ${CMAKE_SOURCE_DIR}/Hardware/clock.c
+      ${CMAKE_SOURCE_DIR}/Hardware/app.c
       ${CMAKE_SOURCE_DIR}/GUI/font.c
      ${CMAKE_SOURCE_DIR}/GUI/gui.c
      ${CMAKE_SOURCE_DIR}/GUI/font_big.c 
