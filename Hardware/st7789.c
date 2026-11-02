@@ -33,12 +33,22 @@ void ST7789_WriteData(uint8_t data) {
 }
 
 void ST7789_Init(void) {
-  /* 厂家复位时序 */
+  /* ---- 1) 硬件复位 ----
+   * 拉低 20ms 足够让屏幕放电 (原来给 1000ms 只是白等开机时间)。
+   * 拉高后按 ST7789 手册必须等 120ms 才能发命令。 */
   HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_RESET);
-  HAL_Delay(1000);
+  HAL_Delay(20);
   HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_SET);
-  HAL_Delay(1000);
+  HAL_Delay(120);
 
+  /* ---- 2) 软件复位 (SWRESET) ----
+   * 只靠 RST 引脚复位时, "按复位键快速重启"的屏幕可能停在休眠/异常状态,
+   * 现象就是"只有背光、没有图像"。这里再发一次 SWRESET, 让芯片内部状态
+   * 彻底清零, 不再依赖外部复位电平是否被屏幕正确识别。 */
+  ST7789_WriteCommand(0x01); /* SWRESET */
+  HAL_Delay(150);            /* 手册: 软复位后需等 120ms 以上 */
+
+  /* ---- 3) 唤醒 (Sleep Out) ---- */
   ST7789_WriteCommand(0x11);
   HAL_Delay(120); // Sleep Out
 

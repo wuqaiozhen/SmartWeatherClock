@@ -2,6 +2,7 @@
 #define __ESP32_H
 
 #include "main.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 /* ESP32 通信串口：USART2 (PA2=TX, PA3=RX), 115200 8N1 */
@@ -27,5 +28,9 @@ int ESP32_GetLine(char *out, uint16_t max_len);
 
 /* 丢弃环形缓冲中未读的数据 */
 void ESP32_ClearRxBuffer(void);
+
+/* 阻塞等待串口数据 (中断里会释放信号量)
+ * 返回 true = 有数据到了; false = 超时 */
+bool ESP32_WaitData(uint32_t timeout_ms);
 
 #endif /* __ESP32_H */

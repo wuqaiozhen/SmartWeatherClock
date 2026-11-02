@@ -255,31 +255,57 @@ void ui_update_weather(int temp_x10, int code)
  * press_x100 : 气压 x100 (102693 = 1026.93 hPa)
  */
 void ui_update_indoor(float temp, float humi, uint32_t press_x100)
-{
-    char buf[16];
-    int  t10;
-    int  neg;
-    int  a;
+   {
+       char buf[16];
+       int t10;
+       int neg;
+       int a;
+       int hi;
+       int pi;
 
-    /* 室内温度 */
-    t10 = (int)(temp * 10.0f + (temp >= 0.0f ? 0.5f : -0.5f));
-    neg = (t10 < 0);
-    a   = neg ? -t10 : t10;
-    snprintf(buf, sizeof(buf), "%s%d.%d", neg ? "-" : "", a / 10, a % 10);
-    draw_temp(TXT2_X, 186, TXT3_W, buf, C_BLUE);
+       /* 上次画过的值 (static: 程序全程保留) */
+       static int  last_t10   = 0;
+       static int  last_humi  = 0;
+       static int  last_press = 0;
+       static bool has_last   = false;      /* 第一次调用时强制全画 */
 
-    /* 湿度 */
-    snprintf(buf, sizeof(buf), "%d%%RH", (int)(humi + 0.5f));
-    center_to(buf, 6);
-    DrawString(TXT2_X, 224, buf, C_BLUE, C_CARD);
+       /* 统一量化成"要显示的整数", 便于比较 */
+       t10 = (int)(temp * 10.0f + (temp >= 0.0f ? 0.5f : -0.5f));  /* 21.54 → 215 */
+       hi  = (int)(humi + 
+        0.5f);                                   /* 72.97 → 73  */
+       pi  = (int)(press_x100 / 100);                              /* 102109 → 1021 */
 
-    /* 气压 */
-    snprintf(buf, sizeof(buf), "%lumb", (unsigned long)(press_x100 / 100));
-    center_to(buf, 6);
-    DrawString(TXT2_X, 262, buf, C_BLUE, C_CARD);
-}
+       /* ---- 温度: 变了才画 ---- */
+       if (!has_last || t10 != last_t10)
+       {
+           neg = (t10 < 0);
+           a   = neg ? -t10 : t10;
+           snprintf(buf, sizeof(buf), "%s%d.%d", neg ? "-" : "", a / 10, a % 10);
+           draw_temp(TXT2_X, 186, TXT3_W, buf, C_BLUE);
+           last_t10 = t10;
+       }
 
- void ui_update_time(int hour, int min, int sec){
+       /* ---- 湿度: 变了才画 ---- */
+       if (!has_last || hi != last_humi)
+       {
+           snprintf(buf, sizeof(buf), "%d%%RH", hi);
+           center_to(buf, 6);
+           DrawString(TXT2_X, 224, buf, C_BLUE, C_CARD);
+           last_humi = hi;
+       }
+
+       /* ---- 气压: 变了才画 ---- */
+       if (!has_last || pi != last_press)
+       {
+           snprintf(buf, sizeof(buf), "%dmb", pi);
+           center_to(buf, 6);
+           DrawString(TXT2_X, 262, buf, C_BLUE, C_CARD);
+           last_press = pi;
+       }
+
+       has_last = true;
+   } 
+   void ui_update_time(int hour, int min, int sec){
     static char last[9] = "        ";      /* 8 个空格 */
         char buf[9];
        snprintf(buf, sizeof(buf), "%02d:%02d:%02d",hour, min, sec); 

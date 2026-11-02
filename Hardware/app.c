@@ -1,4 +1,5 @@
 #include "app.h"
+#include "FreeRTOS.h"
 #include "aht20.h"
 #include "bmp280.h"
 #include "clock.h"
@@ -13,13 +14,19 @@
 #include <stdio.h>
 #include <string.h>
 
-
 /* ---- 请求周期 (ms) ---- */
+#define WEATHER_RETRY_MS 30000u   /* 还没拿到过天气: 30 秒重试 */
 #define WEATHER_PERIOD_MS 600000u /* 天气: 10 分钟 */
 #define TIME_RETRY_MS 3000u       /* 未校准: 3 秒重试 (正式版改 30000u) */
 #define TIME_PERIOD_MS 3600000u   /* 已校准: 1 小时 */
 
+#define STACK_OF(x) (unsigned)osThreadGetStackSpace(x)
+
 static osMessageQueueId_t ui_q = NULL;
+static osThreadId_t s_clock_id = NULL;
+static osThreadId_t s_ui_id = NULL;
+static osThreadId_t s_comm_id = NULL;
+static osThreadId_t s_sensor_id = NULL;
 
 static const osThreadAttr_t clock_attr = {
     .name = "clock",
@@ -35,7 +42,7 @@ static const osThreadAttr_t ui_attr = {
 
 static const osThreadAttr_t comm_attr = {
     .name = "comm",
-    .stack_size = 512 * 4, /* 2KB: 要放 sscanf + printf */
+    .stack_size = 768 * 4, /* 2KB: 要放 sscanf + printf */
     .priority = osPriorityNormal,
 };
 
@@ -96,15 +103,16 @@ static void TaskUI(void *argument) {
              msg.u.weather.code);
       break;
 
-      case UI_MSG_INDOOR:
-       ui_update_indoor(msg.u.indoor.temp, msg.u.indoor.humi,
-                                msg.u.indoor.press_hpa);
-       printf("[UI] indoor %d.%d C %d%%RH %lu hPa\r\n",
-                      (int)(msg.u.indoor.temp * 10) / 10,   /* 用整数打印, 避免浮点 printf 吃栈 */
-                      (int)(msg.u.indoor.temp * 10) % 10,
-                      (int)(msg.u.indoor.humi + 0.5f),
-                      (unsigned long)(msg.u.indoor.press_hpa / 100));
-               break;
+    case UI_MSG_INDOOR:
+      ui_update_indoor(msg.u.indoor.temp, msg.u.indoor.humi,
+                       msg.u.indoor.press_hpa);
+      printf("[UI] indoor %d.%d C %d%%RH %lu hPa\r\n",
+             (int)(msg.u.indoor.temp * 10) /
+                 10, /* 用整数打印, 避免浮点 printf 吃栈 */
+             (int)(msg.u.indoor.temp * 10) % 10,
+             (int)(msg.u.indoor.humi + 0.5f),
+             (unsigned long)(msg.u.indoor.press_hpa / 100));
+      break;
       break;
 
     default:
@@ -125,8 +133,13 @@ static bool handle_time_line(const char *line) {
   if (year >= 2000 && year <= 2100 && mon <= 12 && mon >= 1 && day <= 31 &&
       day >= 1 && hour <= 23 && hour >= 0 && min <= 59 && min >= 0 &&
       sec <= 59 && sec >= 0 && wday <= 6 && wday >= 0) {
-    clock_time_t t = {t.year = year, t.mon = mon, t.day = day,  t.hour = hour,
-                      t.min = min,   t.sec = sec, t.wday = wday};
+    clock_time_t t = {.year = year,
+                      .mon = mon,
+                      .day = day,
+                      .hour = hour,
+                      .min = min,
+                      .sec = sec,
+                      .wday = wday};
     Clock_Set(&t);
 
     m.type = UI_MSG_TIME;
@@ -153,6 +166,7 @@ static bool handle_time_line(const char *line) {
   }
 }
 
+static bool s_weather_ok = false;
 static bool handle_weather_line(const char *line) {
   int temp_x10, code;
   ui_msg_t m;
@@ -167,10 +181,65 @@ static bool handle_weather_line(const char *line) {
     m.u.weather.code = code;
     osMessageQueuePut(ui_q, &m, 0, 0);
     printf("[WEATHER]  temp_x10=%d code=%d\r\n", temp_x10, code);
+    s_weather_ok = true;
     return true;
   } else {
     printf("[WEATHER] 数据超出范围: t=%d code=%d\r\n", temp_x10, code);
     return false;
+  }
+}
+
+static void handle_line(const char *line) {
+  printf("[RX] %s\r\n", line);
+
+  if (strncmp(line, "$T", 2) == 0) {
+    handle_time_line(line);
+  } else if (strncmp(line, "$E", 2) == 0) {
+    printf("[COMM] ESP32 error reply: %s\r\n", line);
+  } else if (strncmp(line, "$W", 2) == 0) {
+    handle_weather_line(line);
+  }
+}
+
+static bool ESP32_Command(const char *cmd, const char *expect, char *resp,
+                          int resp_len, uint32_t timeout_ms) {
+  char line[128];                   /* 临时存放取出来的一整行        */
+  uint32_t start = HAL_GetTick();   /* ① 出发时间: 必须在发送【之前】取 */
+  int explen = (int)strlen(expect); /* ② 要比较几个字符 ("$T" → 2)   */
+
+  ESP32_SendCommand(cmd); /* ③ 把命令发出去               */
+
+  for (;;) /* ④ 等 → 看 → 没到再等          */
+  {
+    uint32_t elapsed = HAL_GetTick() - start; /* ⑤ 到现在花了多久(无符号减法) */
+    uint32_t remain; /* 还能等多久                    */
+
+    if (elapsed >= timeout_ms) /* ⑥ 整体超时了吗?               */
+    {
+      return false; /*    超时 → 放弃                */
+    }
+
+    remain = timeout_ms - elapsed; /* ⑦ 剩下还能等多久              */
+    if (!ESP32_WaitData(remain))   /* ⑧ 睡到有数据(最多 remain)     */
+    {
+      continue; /*    没数据 → 回循环头重新算时间 */
+    }
+
+    while (ESP32_GetLine(line, sizeof(line))) /* ⑨ 把缓冲里的行全取出来 */
+    {
+      if (strncmp(line, expect, (size_t)explen) == 0) /* ⑩ 是我要的那行吗?  */
+      {
+        if (resp != NULL && resp_len > 0) /* ⑪ 调用者要内容吗?            */
+        {
+          strncpy(resp, line, (size_t)(resp_len - 1)); /* ⑫ 安全复制      */
+          resp[resp_len - 1] = '\0'; /* ⑬ strncpy 不保证结尾, 手动补 0 */
+        }
+        return true; /* ⑭ 成功!                      */
+      }
+
+      handle_line(line); /* ⑮ 不是我要的 → 交给业务处理   */
+    }
+    /* 把缓冲取空了还没匹配 → 回到 for 开头, 继续等                    */
   }
 }
 
@@ -181,33 +250,48 @@ static void TaskComm(void *argument) {
   char line[128];
   uint32_t now;
   uint32_t period;
+
+  /* ---- 开机首帧: 立刻请求一次, 不等周期 ---- */
+  printf("[COMM] TX: GET_WEATHER (boot)\r\n");
+  ESP32_SendCommand("GET_WEATHER");
+  s_last_weather_ms = HAL_GetTick();
+
+  printf("[COMM] TX: GET_TIME (boot)\r\n");
+  ESP32_SendCommand("GET_TIME");
+  s_last_time_ms = HAL_GetTick();
+
   for (;;) {
     /* ---- 1) 收数据 ---- */
     if (ESP32_GetLine(line, sizeof(line))) {
-      printf("[RX] %s\r\n", line);
-      if (strncmp(line, "$T", 2) == 0) {
-        handle_time_line(line);
-      } else if (strncmp(line, "$E", 2) == 0) {
-        printf("[COMM] ESP32 error reply: %s\r\n", line);
-      } else if (strncmp(line, "$W", 2) == 0) {
-        handle_weather_line(line);
-      }
+      handle_line(line);
+      continue;
     }
     /* ---- 2) 发请求 ---- */
     now = HAL_GetTick();
-    if (now - s_last_weather_ms >= WEATHER_PERIOD_MS) {
+    period = s_weather_ok ? WEATHER_PERIOD_MS : WEATHER_RETRY_MS;
+    if (now - s_last_weather_ms >= period) {
       s_last_weather_ms = now;
+      char resp[128];
       printf("[COMM] TX: GET_WEATHER\r\n");
-      ESP32_SendCommand("GET_WEATHER");
+      if (ESP32_Command("GET_WEATHER", "$W", resp, sizeof(resp), 3000)) {
+        handle_weather_line(resp);
+      } else {
+        printf("[COMM] weather timeout\r\n");
+      }
+      
     }
 
     period = Clock_IsSet() ? TIME_PERIOD_MS : TIME_RETRY_MS;
     if (now - s_last_time_ms >= period) {
       s_last_time_ms = now;
+      char resp[128];
       printf("[COMM] TX: GET_TIME\r\n");
-      ESP32_SendCommand("GET_TIME");
+      if (ESP32_Command("GET_TIME", "$T", resp, sizeof(resp), 8000)) {
+        handle_time_line(resp);
+      } else {
+        printf("[COMM] time timeout\r\n");
+      }
     }
-    osDelay(20);
   }
 }
 
@@ -234,15 +318,18 @@ static void TaskSensor(void *argument) {
     BMP280_ReadData(&adc_p, &adc_t);
     press = BMP280_CompensatePress((int32_t)adc_p);
     /* ---- 数据有效才投消息---- */
-    if (ok) {ui_msg_t m; m.type =  UI_MSG_INDOOR;
-        m.u.indoor.temp = t; m.u.indoor.humi = h;
-        m.u.indoor.press_hpa = press;
-        osMessageQueuePut(ui_q, &m, 0, 0);
+    if (ok) {
+      ui_msg_t m;
+      m.type = UI_MSG_INDOOR;
+      m.u.indoor.temp = t;
+      m.u.indoor.humi = h;
+      m.u.indoor.press_hpa = press;
+      osMessageQueuePut(ui_q, &m, 0, 0);
     }
-    wake += 2000 * osKernelGetTickFreq() / 1000;
-     osDelayUntil(wake);
+    wake += 10000 * osKernelGetTickFreq() / 1000;
+    osDelayUntil(wake);
   }
-} 
+}
 
 void app_start(void) {
   ui_q = osMessageQueueNew(8, sizeof(ui_msg_t), NULL);
@@ -252,24 +339,30 @@ void app_start(void) {
   }
   printf("[APP] queue ok, item=%u bytes\r\n", (unsigned)sizeof(ui_msg_t));
 
-  osThreadId_t id = osThreadNew(TaskClock, NULL, &clock_attr);
-  if (id == NULL) {
+  s_clock_id = osThreadNew(TaskClock, NULL, &clock_attr);
+  if (s_clock_id == NULL) {
     printf("[CLOCK] create task failed\r\n");
   }
 
-  id = osThreadNew(TaskUI, NULL, &ui_attr);
-  if (id == NULL) {
+  s_ui_id = osThreadNew(TaskUI, NULL, &ui_attr);
+  if (s_ui_id == NULL) {
     printf("[UI] create task failed\r\n");
   }
 
-  id = osThreadNew(TaskComm, NULL, &comm_attr);
-  if (id == NULL) {
+  s_comm_id = osThreadNew(TaskComm, NULL, &comm_attr);
+  if (s_comm_id == NULL) {
     printf("[COMM] create task failed\r\n");
   }
 
-   id = osThreadNew(TaskSensor, NULL, &sensor_attr);
-       if (id == NULL)
-       {
-           printf("[SENSOR] create task failed\r\n");
-       }
+  s_sensor_id = osThreadNew(TaskSensor, NULL, &sensor_attr);
+  if (s_sensor_id == NULL) {
+    printf("[SENSOR] create task failed\r\n");
+  }
+}
+
+void app_report(void) {
+  printf("[MON] heap free = %u B\r\n", (unsigned)xPortGetFreeHeapSize());
+  printf("[MON] stack left: clock=%u ui=%u comm=%u sensor=%u  (bytes)\r\n",
+         STACK_OF(s_clock_id), STACK_OF(s_ui_id), STACK_OF(s_comm_id),
+         STACK_OF(s_sensor_id));
 }

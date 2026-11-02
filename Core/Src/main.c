@@ -71,9 +71,6 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-static uint32_t last_sensor_ms = 0;
-static uint32_t last_weather_ms = 0;
-static uint32_t last_time_ms = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -106,7 +103,8 @@ int main(void)
 
   /* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interf  HAL_Init();
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -145,10 +143,6 @@ int main(void)
   ui_init();
   /* ---- ESP32 链路启动: 请求天气 + 对时 ---- */
   ESP32_Init();
-  printf("[ESP32] TX: GET_WEATHER\r\n");
-  ESP32_SendCommand("GET_WEATHER");
-  printf("[ESP32] TX: GET_TIME\r\n");
-  ESP32_SendCommand("GET_TIME");
   app_start();
   /* USER CODE END 2 */
 
@@ -196,114 +190,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    /* 把 ESP32 的一整行日志/数据转发到调试串口(USART1)，按行打印 */
-    char line[128];
-    if (ESP32_GetLine(line, sizeof(line)))
-    {
-      printf("[RX] %s\r\n", line);
-      if (strncmp(line, "$W", 2) == 0)
-      {
-        int t = 0;
-        int code = 0;
-        int n = sscanf(line, "$W,%d,%d", &t, &code);
-        if (n == 2)
-        {
-          if (t <= 1250 && t >= -550 && code >= 0 && code <= 99)
-          {
-            ui_update_weather(t, code);   /* 天气码: 见 ui.c 的 k_weather[] */
-          }
-          else
-          {
-            printf("[WEATHER] 数据超出范围: t=%d code=%d\r\n", t, code);
-          }
-        }
-        else
-        {
-          printf("[WEATHER] 解析失败 sscanf返回%d\r\n", n);
-        }
-      }
-      else if (strncmp(line, "$T", 2) == 0)
-      {
-        int year = 0;
-        int month = 0;
-        int day = 0;
-        int hour = 0;
-        int min = 0;
-        int sec = 0;
-        int week = 0;
-        int n = sscanf(line, "$T,%d,%d,%d,%d,%d,%d,%d", &year, &month, &day, &hour, &min, &sec, &week);
-        if (n == 7)
-        {
-          if (year >= 2000 && year <= 2100 && month <= 12 && month >= 1 && day <= 31 && day >= 1 && hour <= 23 && hour >= 0 && min <= 59 && min >= 0 && sec <= 59 && sec >= 0 && week <= 6 && week >= 0)
-          {
-            printf("[TIME] sync %04d-%02d-%02d %02d:%02d:%02d w=%d\r\n",
-                   year, month, day, hour, min, sec, week);
-            clock_time_t time = {
-                .year = year,
-                .mon = month,
-                .day = day,
-                .hour = hour,
-                .min = min,
-                .sec = sec,
-                .wday = week};
-            Clock_Set(&time);
-            ui_update_time(hour, min, sec);
-            ui_update_date(year, month, day, week);
-          }
-          else
-          {
-            printf("[TIME] 数据超出范围: year=%04d month=%02d day=%02d hour=%02d min=%02d sec=%02d week=%d\r\n", year, month, day, hour, min, sec, week);
-          }
-        }
-        else
-        {
-          printf("[TIME] 解析失败 sscanf返回%d\r\n", n);
-        }
-      }
-    }
-    clock_time_t time;
-    if (Clock_Tick(&time))
-    {
-      ui_update_time(time.hour, time.min, time.sec);
-      ui_update_date(time.year, time.mon, time.day, time.wday);
-    }
-
-    if ((HAL_GetTick() - last_sensor_ms) >= 2000)
-    {
-      last_sensor_ms += 2000;
-      float st, sh;
-      if (AHT20_Read(&st, &sh) == 0)
-      {
-        ui_update_indoor(st, sh, press);
-      }
-    }
-    if (HAL_GetTick() - last_weather_ms >= 30000)
-    {
-      last_weather_ms = HAL_GetTick(); /* 命令用 = : 防止卡顿后连发 */
-      ESP32_SendCommand("GET_WEATHER");
-    }
-    /* ---- 对时: 未校准每 30 秒重试, 已校准每 1 小时再对一次 ---- */
-    if (!Clock_IsSet())
-    {
-      /* 还没拿到过时间: 尽快重试 (SNTP 可能还没同步好, ESP32 会回 $E,3) */
-      if (HAL_GetTick() - last_time_ms >= 30000u)
-      {
-        last_time_ms = HAL_GetTick();
-        ESP32_SendCommand("GET_TIME");
-      }
-    }
-    else
-    {
-      /* 已经校准: 每小时再对一次, 抵消晶振漂移 */
-      if (HAL_GetTick() - last_time_ms >= 3600000u)
-      {
-        last_time_ms = HAL_GetTick();
-        ESP32_SendCommand("GET_TIME");
-      }
-    }
-    HAL_Delay(1);
+    /* 业务逻辑已全部迁移到 Hardware/app.c 的 4 个任务, 本循环永不执行 */
+    /* USER CODE END 3 */
   }
-  /* USER CODE END 3 */
 }
 
 /**
@@ -323,12 +212,11 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 8;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 4;
   RCC_OscInitStruct.PLL.PLLN = 168;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 4;
@@ -502,6 +390,7 @@ static void MX_GPIO_Init(void)
 /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
@@ -567,7 +456,8 @@ void StartDefaultTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+    app_report();            /* 每 10 秒报一次资源占用 */
+    osDelay(10000);          /* 10000 ticks = 10 秒 (TICK_RATE_HZ = 1000) */
   }
   /* USER CODE END 5 */
 }

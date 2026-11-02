@@ -1,6 +1,8 @@
 #include "esp32.h"
+#include "cmsis_os2.h"
 #include "stm32f4xx_hal_uart.h"
 #include <string.h>
+#include "cmsis_os.h"
 
 extern UART_HandleTypeDef huart2;
 
@@ -25,8 +27,11 @@ static uint16_t s_line_len = 0;
  *   2 = 已收到 "ESC [" (CSI), 正在跳过参数直到终止字节 */
 static uint8_t  s_esc_state = 0;
 
+static osSemaphoreId_t s_rx_sem = NULL;
+
 void ESP32_Init(void)
 {
+    s_rx_sem = osSemaphoreNew(1, 0, NULL);
     s_rx_head = 0;
     s_rx_tail = 0;
     s_line_len = 0;
@@ -132,6 +137,10 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
             s_rx_head = next;
         }
         HAL_UART_Receive_IT(&huart2, &s_rx_byte, 1);
+
+        if(s_rx_sem != NULL){
+            osSemaphoreRelease(s_rx_sem);
+        }
     }
 }
 
@@ -144,3 +153,9 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
         HAL_UART_Receive_IT(&huart2, &s_rx_byte, 1);
     }
 }
+
+ bool ESP32_WaitData(uint32_t timeout_ms)
+   {
+       if (s_rx_sem == NULL) { return false; }          
+       return (osSemaphoreAcquire(s_rx_sem, timeout_ms) == osOK);
+   }
