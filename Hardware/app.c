@@ -292,6 +292,7 @@ static void TaskComm(void *argument) {
         printf("[COMM] time timeout\r\n");
       }
     }
+    ESP32_WaitData(1000);
   }
 }
 
@@ -326,7 +327,7 @@ static void TaskSensor(void *argument) {
       m.u.indoor.press_hpa = press;
       osMessageQueuePut(ui_q, &m, 0, 0);
     }
-    wake += 10000 * osKernelGetTickFreq() / 1000;
+    wake += 2000 * osKernelGetTickFreq() / 1000;
     osDelayUntil(wake);
   }
 }
@@ -365,4 +366,8 @@ void app_report(void) {
   printf("[MON] stack left: clock=%u ui=%u comm=%u sensor=%u  (bytes)\r\n",
          STACK_OF(s_clock_id), STACK_OF(s_ui_id), STACK_OF(s_comm_id),
          STACK_OF(s_sensor_id));
+          /* ↓ 新增这一行 */
+       printf("[MON] state: clock=%d ui=%d comm=%d sensor=%d\r\n",
+              (int)osThreadGetState(s_clock_id),  (int)osThreadGetState(s_ui_id),
+              (int)osThreadGetState(s_comm_id),   (int)osThreadGetState(s_sensor_id));
 }

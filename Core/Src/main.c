@@ -190,7 +190,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    /* 业务逻辑已全部迁移到 Hardware/app.c 的 4 个任务, 本循环永不执行 */
+    
     /* USER CODE END 3 */
   }
 }
