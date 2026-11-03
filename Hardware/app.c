@@ -6,6 +6,7 @@
 #include "cmsis_os.h"
 #include "cmsis_os2.h"
 #include "esp32.h"
+#include "log.h"
 #include "stm32f4xx_hal.h"
 #include "ui.h"
 #include "ui_msg.h"
@@ -13,6 +14,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
 
 /* ---- 请求周期 (ms) ---- */
 #define WEATHER_RETRY_MS 30000u   /* 还没拿到过天气: 30 秒重试 */
@@ -64,9 +66,9 @@ static void TaskClock(void *argument) {
       msg.u.time.sec = t.sec;
       osStatus_t st = osMessageQueuePut(ui_q, &msg, 0, 0);
       if (st != osOK) {
-        printf("[CLOCK] put failed, st=%d\r\n", (int)st);
+        log_printf("[CLOCK] put failed, st=%d\r\n", (int)st);
       }
-      printf("[CLOCK] put %02d:%02d:%02d\r\n", t.hour, t.min, t.sec);
+      log_printf("[CLOCK] put %02d:%02d:%02d\r\n", t.hour, t.min, t.sec);
     }
 
     osDelay(100);
@@ -80,33 +82,33 @@ static void TaskUI(void *argument) {
   for (;;) {
     osStatus_t st = osMessageQueueGet(ui_q, &msg, NULL, osWaitForever);
     if (st != osOK) {
-      printf("[UI] recv failed, st=%d\r\n", (int)st);
+      log_printf("[UI] recv failed, st=%d\r\n", (int)st);
       continue; /* 没取到就重新等, 不要用脏数据 */
     }
     switch (msg.type) {
     case UI_MSG_TIME:
       ui_update_time(msg.u.time.hour, msg.u.time.min, msg.u.time.sec);
-      printf("[UI] recv %02d:%02d:%02d\r\n", msg.u.time.hour, msg.u.time.min,
+      log_printf("[UI] recv %02d:%02d:%02d\r\n", msg.u.time.hour, msg.u.time.min,
              msg.u.time.sec);
       break;
 
     case UI_MSG_DATE:
       ui_update_date(msg.u.date.year, msg.u.date.mon, msg.u.date.day,
                      msg.u.date.wday);
-      printf("[UI] date %04d-%02d-%02d w=%d\r\n", msg.u.date.year,
+      log_printf("[UI] date %04d-%02d-%02d w=%d\r\n", msg.u.date.year,
              msg.u.date.mon, msg.u.date.day, msg.u.date.wday);
       break;
 
     case UI_MSG_WEATHER:
       ui_update_weather(msg.u.weather.temp_x10, msg.u.weather.code);
-      printf("[UI] weather x10=%d code=%d\r\n", msg.u.weather.temp_x10,
+      log_printf("[UI] weather x10=%d code=%d\r\n", msg.u.weather.temp_x10,
              msg.u.weather.code);
       break;
 
     case UI_MSG_INDOOR:
       ui_update_indoor(msg.u.indoor.temp, msg.u.indoor.humi,
                        msg.u.indoor.press_hpa);
-      printf("[UI] indoor %d.%d C %d%%RH %lu hPa\r\n",
+      log_printf("[UI] indoor %d.%d C %d%%RH %lu hPa\r\n",
              (int)(msg.u.indoor.temp * 10) /
                  10, /* 用整数打印, 避免浮点 printf 吃栈 */
              (int)(msg.u.indoor.temp * 10) % 10,
@@ -127,7 +129,7 @@ static bool handle_time_line(const char *line) {
 
   if (sscanf(line, "$T,%d,%d,%d,%d,%d,%d,%d", &year, &mon, &day, &hour, &min,
              &sec, &wday) != 7) {
-    printf("[COMM] $T parse failed\r\n");
+    log_printf("[COMM] $T parse failed\r\n");
     return false;
   }
   if (year >= 2000 && year <= 2100 && mon <= 12 && mon >= 1 && day <= 31 &&
@@ -155,11 +157,11 @@ static bool handle_time_line(const char *line) {
     m.u.date.wday = t.wday;
     osMessageQueuePut(ui_q, &m, 0, 0);
 
-    printf("[TIME] sync %04d-%02d-%02d %02d:%02d:%02d w=%d\r\n", year, mon, day,
+    log_printf("[TIME] sync %04d-%02d-%02d %02d:%02d:%02d w=%d\r\n", year, mon, day,
            hour, min, sec, wday);
     return true;
   } else {
-    printf("[TIME] 数据超出范围: year=%04d month=%02d day=%02d hour=%02d "
+    log_printf("[TIME] 数据超出范围: year=%04d month=%02d day=%02d hour=%02d "
            "min=%02d sec=%02d week=%d\r\n",
            year, mon, day, hour, min, sec, wday);
     return false;
@@ -172,7 +174,7 @@ static bool handle_weather_line(const char *line) {
   ui_msg_t m;
 
   if (sscanf(line, "$W,%d,%d", &temp_x10, &code) != 2) {
-    printf("[COMM] $W parse failed\r\n");
+    log_printf("[COMM] $W parse failed\r\n");
     return false;
   }
   if (temp_x10 <= 1250 && temp_x10 >= -550 && code >= 0 && code <= 99) {
@@ -180,22 +182,22 @@ static bool handle_weather_line(const char *line) {
     m.u.weather.temp_x10 = temp_x10;
     m.u.weather.code = code;
     osMessageQueuePut(ui_q, &m, 0, 0);
-    printf("[WEATHER]  temp_x10=%d code=%d\r\n", temp_x10, code);
+    log_printf("[WEATHER]  temp_x10=%d code=%d\r\n", temp_x10, code);
     s_weather_ok = true;
     return true;
   } else {
-    printf("[WEATHER] 数据超出范围: t=%d code=%d\r\n", temp_x10, code);
+    log_printf("[WEATHER] 数据超出范围: t=%d code=%d\r\n", temp_x10, code);
     return false;
   }
 }
 
 static void handle_line(const char *line) {
-  printf("[RX] %s\r\n", line);
+  log_printf("[RX] %s\r\n", line);
 
   if (strncmp(line, "$T", 2) == 0) {
     handle_time_line(line);
   } else if (strncmp(line, "$E", 2) == 0) {
-    printf("[COMM] ESP32 error reply: %s\r\n", line);
+    log_printf("[COMM] ESP32 error reply: %s\r\n", line);
   } else if (strncmp(line, "$W", 2) == 0) {
     handle_weather_line(line);
   }
@@ -252,11 +254,11 @@ static void TaskComm(void *argument) {
   uint32_t period;
 
   /* ---- 开机首帧: 立刻请求一次, 不等周期 ---- */
-  printf("[COMM] TX: GET_WEATHER (boot)\r\n");
+  log_printf("[COMM] TX: GET_WEATHER (boot)\r\n");
   ESP32_SendCommand("GET_WEATHER");
   s_last_weather_ms = HAL_GetTick();
 
-  printf("[COMM] TX: GET_TIME (boot)\r\n");
+  log_printf("[COMM] TX: GET_TIME (boot)\r\n");
   ESP32_SendCommand("GET_TIME");
   s_last_time_ms = HAL_GetTick();
 
@@ -272,24 +274,23 @@ static void TaskComm(void *argument) {
     if (now - s_last_weather_ms >= period) {
       s_last_weather_ms = now;
       char resp[128];
-      printf("[COMM] TX: GET_WEATHER\r\n");
+      log_printf("[COMM] TX: GET_WEATHER\r\n");
       if (ESP32_Command("GET_WEATHER", "$W", resp, sizeof(resp), 3000)) {
         handle_weather_line(resp);
       } else {
-        printf("[COMM] weather timeout\r\n");
+        log_printf("[COMM] weather timeout\r\n");
       }
-      
     }
 
     period = Clock_IsSet() ? TIME_PERIOD_MS : TIME_RETRY_MS;
     if (now - s_last_time_ms >= period) {
       s_last_time_ms = now;
       char resp[128];
-      printf("[COMM] TX: GET_TIME\r\n");
+      log_printf("[COMM] TX: GET_TIME\r\n");
       if (ESP32_Command("GET_TIME", "$T", resp, sizeof(resp), 8000)) {
         handle_time_line(resp);
       } else {
-        printf("[COMM] time timeout\r\n");
+        log_printf("[COMM] time timeout\r\n");
       }
     }
     ESP32_WaitData(1000);
@@ -311,7 +312,7 @@ static void TaskSensor(void *argument) {
     if (AHT20_Read(&t, &h) == 0) {
       ok = true;
     } else {
-      printf("[SENSOR] AHT20 failed\r\n");
+      log_printf("[SENSOR] AHT20 failed\r\n");
     }
     /* ---- 读BMP280 ---- */
     BMP280_WriteReg(0xF4, 0x27);
@@ -333,41 +334,42 @@ static void TaskSensor(void *argument) {
 }
 
 void app_start(void) {
+  log_Init();
   ui_q = osMessageQueueNew(8, sizeof(ui_msg_t), NULL);
   if (ui_q == NULL) {
-    printf("[APP] create queue failed\r\n");
+    log_printf("[APP] create queue failed\r\n");
     return;
   }
-  printf("[APP] queue ok, item=%u bytes\r\n", (unsigned)sizeof(ui_msg_t));
+  log_printf("[APP] queue ok, item=%u bytes\r\n", (unsigned)sizeof(ui_msg_t));
 
   s_clock_id = osThreadNew(TaskClock, NULL, &clock_attr);
   if (s_clock_id == NULL) {
-    printf("[CLOCK] create task failed\r\n");
+    log_printf("[CLOCK] create task failed\r\n");
   }
 
   s_ui_id = osThreadNew(TaskUI, NULL, &ui_attr);
   if (s_ui_id == NULL) {
-    printf("[UI] create task failed\r\n");
+    log_printf("[UI] create task failed\r\n");
   }
 
   s_comm_id = osThreadNew(TaskComm, NULL, &comm_attr);
   if (s_comm_id == NULL) {
-    printf("[COMM] create task failed\r\n");
+    log_printf("[COMM] create task failed\r\n");
   }
 
   s_sensor_id = osThreadNew(TaskSensor, NULL, &sensor_attr);
   if (s_sensor_id == NULL) {
-    printf("[SENSOR] create task failed\r\n");
+    log_printf("[SENSOR] create task failed\r\n");
   }
 }
 
 void app_report(void) {
-  printf("[MON] heap free = %u B\r\n", (unsigned)xPortGetFreeHeapSize());
-  printf("[MON] stack left: clock=%u ui=%u comm=%u sensor=%u  (bytes)\r\n",
+  log_printf("[MON] heap free = %u B\r\n", (unsigned)xPortGetFreeHeapSize());
+  log_printf("[MON] stack left: clock=%u ui=%u comm=%u sensor=%u  (bytes)\r\n",
          STACK_OF(s_clock_id), STACK_OF(s_ui_id), STACK_OF(s_comm_id),
          STACK_OF(s_sensor_id));
-          /* ↓ 新增这一行 */
-       printf("[MON] state: clock=%d ui=%d comm=%d sensor=%d\r\n",
-              (int)osThreadGetState(s_clock_id),  (int)osThreadGetState(s_ui_id),
-              (int)osThreadGetState(s_comm_id),   (int)osThreadGetState(s_sensor_id));
+  /* ↓ 新增这一行 */
+  log_printf("[MON] state: clock=%d ui=%d comm=%d sensor=%d\r\n",
+         (int)osThreadGetState(s_clock_id), (int)osThreadGetState(s_ui_id),
+         (int)osThreadGetState(s_comm_id), (int)osThreadGetState(s_sensor_id));
 }
