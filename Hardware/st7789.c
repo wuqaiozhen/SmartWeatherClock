@@ -33,6 +33,7 @@ void ST7789_WriteData(uint8_t data) {
 }
 
 void ST7789_Init(void) {
+   HAL_Delay(500);
   /* ---- 1) 硬件复位 ----
    * 拉低 20ms 足够让屏幕放电 (原来给 1000ms 只是白等开机时间)。
    * 拉高后按 ST7789 手册必须等 120ms 才能发命令。 */

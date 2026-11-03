@@ -190,11 +190,10 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    
+    /* biz logic moved to Hardware/app.c (clock/ui/comm/sensor tasks) */
     /* USER CODE END 3 */
   }
 }
-
 /**
   * @brief System Clock Configuration
   * @retval None
