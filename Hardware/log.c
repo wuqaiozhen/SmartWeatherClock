@@ -29,7 +29,8 @@ static char lvl_to_char(int lvl) {
 /* ---------- 带等级和模块 tag 的日志 ----------
  * 输出: [I][COMM] TX: GET_TIME
  * "前缀 + 正文"在同一次持锁里完成, 所以不会被别的任务切开 */
-void log_print(int lvl, const char *tag, const char *fmt, ...) {
+ void log_print(int lvl, const char *tag, const char *func, int line,
+                  const char *fmt, ...) {
   va_list ap;
    clock_time_t now;
 
@@ -42,6 +43,8 @@ void log_print(int lvl, const char *tag, const char *fmt, ...) {
     printf("[--:--:--]");
   }
   printf("[%c][%s] ", lvl_to_char(lvl), tag); /* 前缀 (printf 最终调 _write, 不加锁) */
+
+  if(func != NULL){printf("%s:%d ", func, line);}
 
   va_start(ap, fmt);
   vprintf(fmt, ap); /* 正文 */

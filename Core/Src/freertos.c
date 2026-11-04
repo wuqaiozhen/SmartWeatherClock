@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
+#include <stdio.h>
 #include "FreeRTOS.h"
 #include "task.h"
 #include "main.h"
@@ -56,11 +57,30 @@
 void vApplicationStackOverflowHook(xTaskHandle xTask, signed char *pcTaskName);
 
 /* USER CODE BEGIN 4 */
+/* uart.c 里实现的"发一个字节" */
+extern int __io_putchar(int ch);
+
 void vApplicationStackOverflowHook(xTaskHandle xTask, signed char *pcTaskName)
 {
-   /* Run time stack overflow checking is performed if
-   configCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2. This hook function is
-   called if a stack overflow is detected. */
+   /* 栈溢出钩子: 此时栈已经被踩坏, 绝对不能再用 printf(它自己要吃 400+ 字节栈)
+    * 所以这里直接用 __io_putchar 逐字节输出, 只用到几个寄存器 */
+   const char *p;
+   (void)xTask;
+
+   p = "\r\n!!! STACK OVERFLOW in task [";
+   while (*p != '\0') { __io_putchar(*p++); }
+
+   if (pcTaskName != NULL) {
+      while (*pcTaskName != '\0') { __io_putchar(*pcTaskName++); }
+   }
+
+   p = "] !!!\r\n";
+   while (*p != '\0') { __io_putchar(*p++); }
+
+   __disable_irq();
+   for (;;)
+   {
+   }
 }
 /* USER CODE END 4 */
 

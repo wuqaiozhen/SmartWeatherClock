@@ -1,6 +1,8 @@
 #ifndef __LOG_H
 #define __LOG_H
 
+ #include <stddef.h>
+
 /* ============================================================
  *  日志组件 (线程安全 + 等级 + 模块 tag)
  *
@@ -34,14 +36,15 @@ void log_Init(void);
 
 
 /* 接口: 等级 + 模块 tag */
-void log_print(int lvl, const char *tag, const char *fmt, ...);
+void log_print(int lvl, const char *tag, const char *func, int line,
+                  const char *fmt, ...);
 
 /* ---------- 四个便捷宏 ----------
  * do { ... } while (0) 是为了让宏在任何 if/else 里都当成"一条语句",
  * 而且里面的 if 条件在编译期就能算出真假, 被关掉的日志不会产生任何代码 */
-#define LOGE(tag, ...) do { if (LOG_LVL_ERROR >= LOG_LEVEL_MIN) log_print(LOG_LVL_ERROR, tag, __VA_ARGS__); } while (0)
-#define LOGW(tag, ...) do { if (LOG_LVL_WARN  >= LOG_LEVEL_MIN) log_print(LOG_LVL_WARN,  tag, __VA_ARGS__); } while (0)
-#define LOGI(tag, ...) do { if (LOG_LVL_INFO  >= LOG_LEVEL_MIN) log_print(LOG_LVL_INFO,  tag, __VA_ARGS__); } while (0)
-#define LOGD(tag, ...) do { if (LOG_LVL_DEBUG >= LOG_LEVEL_MIN) log_print(LOG_LVL_DEBUG, tag, __VA_ARGS__); } while (0)
+#define LOGE(tag, ...) do { if (LOG_LVL_ERROR >= LOG_LEVEL_MIN) log_print(LOG_LVL_ERROR, tag,__func__, __LINE__, __VA_ARGS__); } while (0)
+#define LOGW(tag, ...) do { if (LOG_LVL_WARN  >= LOG_LEVEL_MIN) log_print(LOG_LVL_WARN,  tag, __func__, __LINE__,__VA_ARGS__); } while (0)
+#define LOGI(tag, ...) do { if (LOG_LVL_INFO  >= LOG_LEVEL_MIN) log_print(LOG_LVL_INFO,  tag, NULL, 0 ,__VA_ARGS__); } while (0)
+#define LOGD(tag, ...) do { if (LOG_LVL_DEBUG >= LOG_LEVEL_MIN) log_print(LOG_LVL_DEBUG, tag, NULL, 0, __VA_ARGS__); } while (0)
 
 #endif /* __LOG_H */
