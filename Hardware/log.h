@@ -32,7 +32,8 @@
 
 void log_Init(void);
 
-/* 新接口: 等级 + 模块 tag */
+
+/* 接口: 等级 + 模块 tag */
 void log_print(int lvl, const char *tag, const char *fmt, ...);
 
 /* ---------- 四个便捷宏 ----------

@@ -93,3 +93,11 @@ bool Clock_Tick(clock_time_t *out)
          }
          return true;
 }
+
+bool Clock_Get(clock_time_t *out)
+{
+    if(out == NULL || s_valid == false) return false;
+    *out = s_now;
+    return true;
+
+}
