@@ -46,23 +46,6 @@ void log_print(int lvl, const char *tag, const char *fmt, ...) {
   }
 }
 
-/* ---------- 老接口: 无等级/tag, 保留给已有代码 ---------- */
-void log_printf(const char *fmt, ...) {
-  va_list ap;
-
-  if (s_log_mutex != NULL) {
-    osMutexAcquire(s_log_mutex, osWaitForever);
-  }
-
-  va_start(ap, fmt);
-  vprintf(fmt, ap);
-  va_end(ap);
-
-  if (s_log_mutex != NULL) {
-    osMutexRelease(s_log_mutex);
-  }
-}
-
 /* ---------- 覆盖 syscalls.c 的弱符号: 只管把字节送出去, 不加锁 ---------- */
 int _write(int file, char *ptr, int len) {
   int i;

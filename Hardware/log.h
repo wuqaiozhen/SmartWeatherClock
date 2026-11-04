@@ -32,9 +32,6 @@
 
 void log_Init(void);
 
-/* 老接口: 线程安全的 printf, 无等级/tag (保留给已有代码) */
-void log_printf(const char *fmt, ...);
-
 /* 新接口: 等级 + 模块 tag */
 void log_print(int lvl, const char *tag, const char *fmt, ...);
 
