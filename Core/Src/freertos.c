@@ -18,7 +18,6 @@
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
-#include <stdio.h>
 #include "FreeRTOS.h"
 #include "task.h"
 #include "main.h"
@@ -57,13 +56,14 @@
 void vApplicationStackOverflowHook(xTaskHandle xTask, signed char *pcTaskName);
 
 /* USER CODE BEGIN 4 */
-/* uart.c 里实现的"发一个字节" */
+/* send one byte (implemented in uart.c) */
 extern int __io_putchar(int ch);
 
 void vApplicationStackOverflowHook(xTaskHandle xTask, signed char *pcTaskName)
 {
-   /* 栈溢出钩子: 此时栈已经被踩坏, 绝对不能再用 printf(它自己要吃 400+ 字节栈)
-    * 所以这里直接用 __io_putchar 逐字节输出, 只用到几个寄存器 */
+   /* stack overflow hook: the stack is ALREADY corrupted here.
+    * Do NOT call printf/log (printf itself needs 400+ bytes of stack).
+    * Only use __io_putchar or direct register writes. */
    const char *p;
    (void)xTask;
 
