@@ -127,11 +127,9 @@ int main(void)
   MX_SPI2_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  float t, h;
-  if (AHT20_Read(&t, &h) == 0)
-    printf("AHT20: temp=%.2f C, humi=%.2f %%\r\n", t, h);
-  else
-    printf("AHT20 read failed\r\n");
+  /* NOTE: AHT20 的读取用到了 osSemaphoreAcquire(会阻塞),
+   * 而这里是调度器启动之前, 不能阻塞 -> 开机不做 AHT20 自检。
+   * AHT20 每 2 秒由 TaskSensor 读取, 并在 app_start() 里 AHT20_Init() 建信号量。*/
 
   uint32_t adc_P, adc_T;
   BMP280_ReadCalib();

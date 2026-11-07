@@ -413,6 +413,23 @@ s_log_mutex = osMutexNew(NULL);      /* 默认属性含【优先级继承】 */
 
 ---
 
+## 10. 哪些 API 需要调度器（启动前不能调用）
+
+RTOS 的 API 分两类，**调度器启动前（`osKernelStart()` 之前）只能用第一类**：
+
+| 类别 | API | 启动前能用吗 |
+|---|---|---|
+| **创建类**（不阻塞） | `osThreadNew` / `osMessageQueueNew` / `osSemaphoreNew` / `osMutexNew` / `osTimerNew` / `Log_Init` | ✅ 能 |
+| **阻塞类**（会睡） | `osDelay` / `osDelayUntil` / `osSemaphoreAcquire` / `osMessageQueueGet` / `osMutexAcquire` | ❌ **不能**（会卡死） |
+
+**为什么阻塞类会卡死**：阻塞 = "睡一会儿让别人跑"，但没有调度器 = 没有别人，也没有"闹钟"能把你叫醒。
+
+> 📌 `HAL_Delay` 和 `osDelay` 是一对**相反**的东西：
+> - `HAL_Delay`：靠 while 轮询 tick → **启动前能用，任务里不能用**（烧 CPU）
+> - `osDelay`：靠内核调度 → **任务里必须用，启动前不能用**（没内核）
+
+---
+
 # 第四部分：项目核心设计（复习卡片）
 
 | # | 设计 | 解决什么问题 |
@@ -654,6 +671,49 @@ app.c 调用: log_Init();              ← 小写 l
 
 ---
 
+## 坑 11 ⭐：调度器启动前调用了阻塞 API
+
+### 现象
+
+**开机完全没有任何串口输出**（连第一行 `BMP280 temp=...` 都没有）。
+
+### 原因
+
+`main.c` 的 `USER CODE 2` 在 `osKernelStart()` **之前**执行，其中调用了 `AHT20_Read()`：
+
+```c
+main()
+├─ HAL_Init / MX_xxx_Init
+├─ USER CODE 2
+│    ├─ AHT20_Init()        ✅ 只是 osSemaphoreNew, 不阻塞
+│    ├─ AHT20_Read()        ❌ 内部 osSemaphoreAcquire(100) → 阻塞 → 卡死
+│    └─ BMP280_ReadCalib()  ✅ 阻塞式 HAL（while 轮询），不依赖调度器
+├─ osKernelInitialize()
+└─ osKernelStart()          ← 这里之后才是多任务世界
+```
+
+`osSemaphoreAcquire` 想睡但**没有调度器**，于是永久卡住 → 后面的 `ST7789_Init`、`app_start`、`osKernelStart` 全都没执行到。
+
+### 修法
+
+1. **开机自检不要用阻塞类 API**（本例直接删掉 AHT20 自检；室内数据由 `TaskSensor` 每 2 秒读取）
+2. 如果确实需要在启动前做准备，只用 `xxxNew()` 这类创建型 API
+3. `AHT20_Init()` 这类初始化函数要写成**幂等**（`if (s_i2c_sem == NULL) { ... }`），因为可能被调用多次
+
+### 排查套路
+
+> **看日志停在"哪一行"，然后问"这一行之后、下一行之前，调用了什么？"**
+
+这个现象和"栈溢出"、"HardFault"的症状**一模一样**（都是静默死机），但原因完全不同：
+
+| 静默死机的原因 | 线索 |
+|---|---|
+| 栈溢出 | 有 `!!! STACK OVERFLOW !!!`（钩子实现之后）或半行日志 |
+| HardFault | 半行日志 / 随机位置 |
+| **启动前调用阻塞 API** | **一行都没有**（因为卡在最早的 USER CODE 2） |
+
+---
+
 # 第六部分：自检清单
 
 看到这些现象，先想到这些地方：
@@ -664,7 +724,7 @@ app.c 调用: log_Init();              ← 小写 l
 | `implicit declaration of 'xxx'` | 编译期：没 include 头文件 | `#include` |
 | `nested functions` / `invalid storage class` / `expected ... at end of input` | **花括号少了** | 文件末尾数括号（CubeMX 生成后常见） |
 | 某个任务完全不动 | **任务饿死** | `osThreadGetState` 长期 = 1？ |
-| 全系统静默 | HardFault / 死锁 / 栈溢出 | 有没有半行日志？`heap/stack` 报告异常？ |
+| 全系统静默 | HardFault / 死锁 / 栈溢出 / **启动前调阻塞 API** | 日志停在半行？堆栈报告异常？是不是卡在 `USER CODE 2`？ |
 | 日志交错 / 内容被吃掉 | printf 不可重入 | 锁的层级是否包住整个 printf |
 | 某个任务栈水位 = 0 | **被邻居踩了**（不是它自己） | 查隔壁任务的栈是否太小 |
 | 串口收不到数据 | 中断没重新 arm / 对端不在线 | `[RX]` 有没有、ESP32 断电没 |

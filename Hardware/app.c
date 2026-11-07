@@ -335,7 +335,7 @@ static void TaskSensor(void *argument) {
 
 void app_start(void) {
   log_Init();
-
+AHT20_Init();
   ui_q = osMessageQueueNew(8, sizeof(ui_msg_t), NULL);
   if (ui_q == NULL) {
     LOGE("APP", "create queue failed\r\n");
