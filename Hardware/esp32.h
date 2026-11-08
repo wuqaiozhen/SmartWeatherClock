@@ -10,9 +10,6 @@
 /* 初始化：清空缓冲并启动接收中断 */
 void ESP32_Init(void);
 
-/* 发送字符串（不自动换行） */
-void ESP32_SendString(const char *s);
-
 /* 发送一条命令，自动补 "\r\n" */
 void ESP32_SendCommand(const char *cmd);
 
