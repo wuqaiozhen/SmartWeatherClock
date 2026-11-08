@@ -130,15 +130,12 @@ void app_main(void) {
 
   BaseType_t ok;
   ok = xTaskCreate(uart_task, "uart", 4096, NULL, 10, NULL);
-  configASSERT(ok = pdPASS);
+  configASSERT(ok == pdPASS);
 
   ok = xTaskCreate(net_task, "net", 8192, NULL, 5, NULL);
-  configASSERT(ok = pdPASS);
+  configASSERT(ok == pdPASS);
 
   ESP_LOGI(TAG,"tasks started");
 
-  
-  while (1) {
-    
-}
+  return;
 }

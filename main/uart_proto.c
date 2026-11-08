@@ -99,7 +99,7 @@ void uart_send_line(const char *s)
 {
   char buf[LINE_BUF_SIZE + 3];
 
-  int n = snprintf(buf, sizeof(buf)," %s\r\n", s);
+  int n = snprintf(buf, sizeof(buf),"%s\r\n", s);
   if(n <= 0){
     return ;
   }
