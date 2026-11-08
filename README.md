@@ -134,6 +134,7 @@ USART1（PA9/PA10）→ 板载 CH340 → PC 端 **COM7**，115200。
 | `生成后修复.cmd` | **每次 CubeMX GENERATE CODE 后必跑**：修 `main.c` 括号、检查 defaultTask 栈、把自有注释 ASCII 化、检查编码 |
 | `检查编码.cmd` | 只检查中文注释有没有被 CubeMX 破坏 |
 | `日志系统说明.md` | 日志组件设计、16 条 C 知识点、4 个踩坑、自测题 |
+| `项目笔记.md` | 双芯项目总笔记：协议 v2.0、显示布局、关键设计、32 条踩坑清单 |
 | `C与RTOS知识清单.md` | C 语言 / 嵌入式 / FreeRTOS / 项目设计 / 11 个踩坑 / 自检清单 |
 
 ---
@@ -297,3 +298,21 @@ heap free  ≈ 5064 B
 | 9 | **调度器启动前不能调用阻塞 API**（`osSemaphoreAcquire` 等） |
 | 10 | **ST-Link 的 3V3 不是电源**（几十 mA，带不动 MCU+屏幕） |
 | 11 | 背光亮 ≠ 模块有电（背光 LED 只需 2V，逻辑要 ≥2.3V） |
+
+---
+
+## 11. 仓库分支（两颗芯片分开存放）
+
+| 分支 | 固件 | 构建方式 |
+|---|---|---|
+| `main` | STM32F407 时钟（CubeMX + CMake + FreeRTOS） | 本分支根目录 `CMakeLists.txt` / `编译.cmd` |
+| `esp32` | ESP32-S3 联网（ESP-IDF v5.4.4） | 切到 `esp32` 分支后 `idf.py build` |
+
+ESP32 侧源码位于 `main/`：`station_example_main.c`（uart/net 双任务）、`uart_proto.c`（行协议）、`wifi.c`、`weather.c`、`ntp.c`，配置见 `sdkconfig`。
+
+```bash
+git fetch origin
+git switch -c esp32 origin/esp32
+```
+
+两分支历史独立，互不影响；协议与引脚定义见 `项目笔记.md`。
